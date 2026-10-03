@@ -24,7 +24,7 @@ The only page with the numbers. Each says where and when it was measured.
 ## On charter v0.13.0 (2026-10-04)
 
 - `mise run deploy` (charter's: the secrets from fnox), then `mise run live-test`: 45 checks pass, raw, through the TypeScript SDK and over MCP, with the test machine's service token through Access (an MCP tool call included). The two existing service tokens were renamed to charter's `fleet-api:<machine>`, keeping their Client ID and secret; they stayed in the Access policy.
-- This Mac (claude-rig's `mise run report`, its token `fleet-api:apples-macbook-pro`): its report posted and listed, with no change on the machine.
+- This Mac (claude-rig's report task, its token `fleet-api:apples-macbook-pro`): its report posted and listed, with no change on the machine.
 
 ## On charter's go/auth (2026-10-03)
 
