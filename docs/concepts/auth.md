@@ -36,7 +36,7 @@ Each operation's `Security` in `api/contract.go` names the scope it needs (`auth
 1. Charter's `go/auth` middleware (`auth.Middleware`) verifies what the request carries, locally (the issuers' keys are fetched once and kept): the Access JWT (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`), a bearer JWT from the OpenID Connect issuer (`OIDC_ISSUER`, whose keys it finds by its discovery document, and `OIDC_AUDIENCE`), or the read or write token. Then it reads the operation's `Security`: a caller with the scope it needs is let in. No credentials or bad ones: 401 with `WWW-Authenticate: Bearer`. Known but without the scope: 403.
 2. Then the rule a scope cannot say (`MayPostFor` in `api/auth.go`, called by the post handler): a machine's token posts only for the device it was enrolled for, found by its Client ID (`auth.CallerOf(ctx).Machine`). A relation check against a Zanzibar engine (the owner's `authz-core`: may this caller do this to that object?) goes in the same place when there are more such rules.
 
-An MCP tool call (`/api/mcp`) runs the same operation as its REST route, with the caller's `Authorization` header.
+An MCP tool call (`/api/mcp`) runs the same operation as its REST route, as the same caller: charter's `go/humamcp` passes on its `Authorization` and `Cf-Access-Jwt-Assertion` headers.
 
 ## People of a product: an OpenID Connect issuer
 
@@ -50,5 +50,5 @@ The contract declares an `openIdConnect` scheme at `/.well-known/openid-configur
 
 - Behind Access, a bearer token alone never reaches the Worker: the edge refuses it. The bearer tokens work only locally, or with Access credentials beside them.
 - Fern's TypeScript SDK sends only one of the two service-token headers by itself (fern-api/fern#17775): give it both as `headers` with `auth: false` ([Access](../guides/access.md#from-the-sdks)). The Go SDK sends both from `FLEET_API_ACCESS_CLIENT_ID` and `FLEET_API_ACCESS_CLIENT_SECRET`.
-- Access's OAuth for MCP clients is beta at Cloudflare; a client must support RFC 8707. Charter's `access` tasks do not keep it on the application ([Access](../guides/access.md#protect-the-worker)).
-- An MCP tool call passes on only the `Authorization` header (charter's `go/humamcp`), so a caller that comes through Access (a person's login, a machine's service token) is 401 inside a tool call; a bearer token works.
+- Access's OAuth for MCP clients is beta at Cloudflare; a client must support RFC 8707. It is set in the dashboard, and charter's `access` tasks keep it ([Access](../guides/access.md#protect-the-worker)).
+- No `/.well-known/oauth-protected-resource` (RFC 9728) for the OpenID Connect issuer yet: it waits on charter (joeblew999/charter#67).

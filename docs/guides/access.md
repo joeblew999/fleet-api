@@ -26,7 +26,7 @@ mise run access:setup -- <email>...           # the Access application, its poli
 
 Without credentials a browser is sent to the GitHub login (302), a program gets 302 or 401: the Worker never sees the request.
 
-Access's OAuth for MCP clients (the application's `oauth_configuration`, with dynamic client registration for `https://claude.ai/api/mcp/auth_callback`) is not something charter's `access` keeps: `access:setup`, `access:token -- create` and `-- revoke` write the application without it. Until charter keeps it, turn it on again in the Zero Trust dashboard after any of them, or MCP clients can no longer log in.
+Access's OAuth for MCP clients (the application's `oauth_configuration`, with dynamic client registration for `https://claude.ai/api/mcp/auth_callback`) is set in the Zero Trust dashboard, not by `access:setup`; charter's `access` keeps it, and every other setting it does not set itself, when it writes the application.
 
 ## Give a machine its token
 

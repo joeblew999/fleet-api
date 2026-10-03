@@ -9,7 +9,7 @@
 
 [tools]
 # The tool every task runs, the release's binary: `mise up --bump github:joeblew999/charter` moves to a newer one.
-"github:joeblew999/charter" = "0.12.0"
+"github:joeblew999/charter" = "0.13.0"
 go = "1.27.1"
 node = "26.10.0"
 # Builds the generated CLI: mise run sdk:cli:build.
@@ -47,7 +47,7 @@ FNOX_NO_DEFAULTS = "true"
 [task_config]
 # The tasks every project shares, and those of its language: charter's tasks/ folder (a project
 # includes it from GitHub, by tag). A task defined below takes the place of the shared one.
-includes = ["git::https://github.com/joeblew999/charter.git//tasks/shared?ref=v0.12.0", "git::https://github.com/joeblew999/charter.git//tasks/go?ref=v0.12.0"]
+includes = ["git::https://github.com/joeblew999/charter.git//tasks/shared?ref=v0.13.0", "git::https://github.com/joeblew999/charter.git//tasks/go?ref=v0.13.0"]
 
 # ---- the project ---------------------------------------------------------------------------------
 
