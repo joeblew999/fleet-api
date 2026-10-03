@@ -1,12 +1,12 @@
 // The generated TypeScript SDK (sdk/out/typescript-dist) against the live API: a machine posts its
 // report with the write token, a reader gets it back with the read token, typed errors included.
-// Usage, from the project's folder (the SDK is the one in its sdk/out), with READ_TOKEN and
-// WRITE_TOKEN set: node test/sdk-live-test.mjs <origin>
+// Usage, from the project's folder (the SDK is the one in its sdk/out), with FLEET_API_READ_TOKEN
+// and FLEET_API_WRITE_TOKEN set: node test/sdk-live-test.mjs <origin>
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 const origin = process.argv[2];
 const { FleetClient, Fleet } = await import(pathToFileURL(`${process.cwd()}/sdk/out/typescript-dist/esm/index.mjs`));
-const { READ_TOKEN: read, WRITE_TOKEN: write } = process.env;
+const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write } = process.env;
 
 let failed = 0;
 function check(name, ok, detail) {

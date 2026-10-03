@@ -1,13 +1,13 @@
 // Live test of the device API: a report posted with the write token is read back, as posted,
 // through the list, the device's view and its history; the tokens, the rules and the limits hold.
 // It reports as the test machine 0000000000000001 (host live-test), which then stays in the list.
-// Usage, from the project's folder, with READ_TOKEN and WRITE_TOKEN set: node test/live-test.mjs <origin>
+// Usage, from the project's folder, with FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN set: node test/live-test.mjs <origin>
 import { readFileSync } from "node:fs";
 
 const origin = process.argv[2];
-const { READ_TOKEN: read, WRITE_TOKEN: write } = process.env;
+const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write } = process.env;
 if (!read || !write) {
-  console.log("FAIL  READ_TOKEN and WRITE_TOKEN must be set (on Cloudflare: fnox exec -- ...)");
+  console.log("FAIL  FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN must be set (on Cloudflare: fnox exec -- ...)");
   process.exit(1);
 }
 const id = "0000000000000001";
