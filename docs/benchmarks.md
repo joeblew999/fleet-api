@@ -21,6 +21,11 @@ The only page with the numbers. Each says where and when it was measured.
 - A Go program on the committed SDK, credentials only in `FLEET_API_ACCESS_CLIENT_ID` and `_SECRET`: `Devices.List` answered.
 - The Wasm with `authn` (TinyGo 0.42): 2,688,668 B, 962,978 B gzipped, 113 KB gzipped more than without it; with ES256 too it would be 1,139,261 B gzipped.
 
+## On charter v0.13.0 (2026-10-04)
+
+- `mise run deploy` (charter's: the secrets from fnox), then `mise run live-test`: 45 checks pass, raw, through the TypeScript SDK and over MCP, with the test machine's service token through Access (an MCP tool call included). The two existing service tokens were renamed to charter's `fleet-api:<machine>`, keeping their Client ID and secret; they stayed in the Access policy.
+- This Mac (claude-rig's `mise run report`, its token `fleet-api:apples-macbook-pro`): its report posted and listed, with no change on the machine.
+
 ## On charter's go/auth (2026-10-03)
 
 - The Wasm with charter v0.12.0's `go/auth` in place of fleet-api's own `authn` (go-jose; RS256, ES256 and EdDSA; TinyGo 0.42): 3,261,138 B, 1,197,218 B gzipped, about 234 KB gzipped more than with `authn`, under the 3 MB limit `mise run build` checks.
