@@ -66,6 +66,7 @@ type DeviceReport struct {
 	Keeper  DeviceKeeper  `json:"keeper"`
 	Rig     *DeviceRig    `json:"rig,omitempty" doc:"The Claude worker claude-rig set up; absent when the reporting tool does not know."`
 	Claims  *DeviceClaims `json:"claims,omitempty" doc:"Who holds the machine now; absent when the reporting tool does not know."`
+	VMs     *DeviceVMs    `json:"vms,omitempty" doc:"The virtual machines on this machine; absent when the reporting tool does not know."`
 }
 
 // DeviceTool is the program that sent the report.
@@ -214,6 +215,29 @@ type DeviceClaim struct {
 	Job    string `json:"job" minLength:"1" maxLength:"200" doc:"What it is doing."`
 	Since  int64  `json:"since" minimum:"1" doc:"When it was taken, Unix milliseconds, by the machine's clock."`
 	Until  int64  `json:"until,omitempty" minimum:"0" doc:"When it lapses unless renewed, Unix milliseconds; absent when it does not lapse."`
+}
+
+// DeviceVMs is the virtual machines on the machine, as the tool that manages them sees them.
+type DeviceVMs struct {
+	_ struct{} `json:"-" additionalProperties:"true"`
+
+	Status         string     `json:"status" enum:"ok,none,unknown" doc:"none: no VM manager on this machine."`
+	Why            string     `json:"why,omitempty" maxLength:"200"`
+	Manager        string     `json:"manager,omitempty" maxLength:"200" doc:"What runs them: utm."`
+	ManagerRunning *bool      `json:"manager_running,omitempty" doc:"The manager is running. When it is not, every VM is stopped, and the list is what the reporting tool knows of them."`
+	List           []DeviceVM `json:"list,omitempty" maxItems:"32"`
+}
+
+// DeviceVM is one virtual machine.
+type DeviceVM struct {
+	_ struct{} `json:"-" additionalProperties:"true"`
+
+	Name         string `json:"name" minLength:"1" maxLength:"200"`
+	State        string `json:"state" minLength:"1" maxLength:"200" doc:"As the manager says it: started, stopped, paused, starting, stopping."`
+	OS           string `json:"os,omitempty" enum:"windows,linux,darwin" doc:"The system inside; absent when not known."`
+	Owner        string `json:"owner,omitempty" maxLength:"200" doc:"Who made it: an agent, a repository or a tool. Never a person's user name or address, so no @."`
+	KeepRunning  bool   `json:"keep_running,omitempty" doc:"The machine starts it again whenever it stops."`
+	KeeperStarts int32  `json:"keeper_starts,omitempty" minimum:"0" doc:"How many times the machine's keeper has started it since the keeper began."`
 }
 
 // Conditions the Worker works out. Notifications will announce these.
@@ -441,6 +465,23 @@ func (r *DeviceReport) Validate() []FieldError {
 			}
 			if claim.Until != 0 && claim.Until < claim.Since {
 				bad(p+".until", "before since")
+			}
+		}
+	}
+	if v := r.VMs; v != nil {
+		ok = section("vms", v.Status, v.Why)
+		need(ok, "vms.manager_running", v.ManagerRunning != nil)
+		only(ok, "vms.manager", v.Manager != "")
+		only(ok, "vms.list", len(v.List) > 0)
+		names := map[string]bool{}
+		for i, vm := range v.List {
+			p := "vms.list[" + itoa(i) + "]"
+			if names[strings.ToLower(vm.Name)] {
+				bad(p+".name", "given twice")
+			}
+			names[strings.ToLower(vm.Name)] = true
+			if strings.Contains(vm.Owner, "@") {
+				bad(p+".owner", "has an @: name the agent or repository, not a person")
 			}
 		}
 	}
