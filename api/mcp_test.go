@@ -41,7 +41,8 @@ func toolCall(t *testing.T, base, token, name, arguments string) (string, any, b
 	return text, result["structuredContent"], result["isError"] == true
 }
 
-// The tools are the operations that read, and hello; posting a report is not one: machines write.
+// The tools are the operations that read, and hello; posting a report and forgetting a machine are
+// not: they change data, with the write token.
 func TestMCPToolsAreTheReadOperations(t *testing.T) {
 	srv, _ := server(t)
 	status, answer := mcp(t, srv.URL, "tools/list", `{}`)
@@ -118,9 +119,10 @@ func TestMCPErrors(t *testing.T) {
 		method, params string
 		code           float64
 	}{
-		"unknown tool":          {"tools/call", `{"name":"deleteDevice","arguments":{}}`, -32602},
-		"posting is not a tool": {"tools/call", `{"name":"postDeviceReport","arguments":{}}`, -32602},
-		"unknown method":        {"resources/list", `{}`, -32601},
+		"unknown tool":           {"tools/call", `{"name":"noSuchTool","arguments":{}}`, -32602},
+		"posting is not a tool":  {"tools/call", `{"name":"postDeviceReport","arguments":{}}`, -32602},
+		"deleting is not a tool": {"tools/call", `{"name":"deleteDevice","arguments":{"id":"3f9a1c0b7d2e4a65"}}`, -32602},
+		"unknown method":         {"resources/list", `{}`, -32601},
 	} {
 		if status, answer := mcp(t, srv.URL, test.method, test.params); status != 200 || code(answer) != test.code {
 			t.Errorf("%s: HTTP %d %v, want error %v", name, status, answer, test.code)

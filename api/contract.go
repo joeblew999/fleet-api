@@ -65,6 +65,12 @@ type DeviceReportsInput struct {
 
 type DeviceReportsOutput struct{ Body DeviceHistory }
 
+type DeviceDeleteInput struct {
+	ID string `path:"id" pattern:"^[0-9a-f]{16}$" example:"3f9a1c0b7d2e4a65" doc:"The machine id: 16 lower-case hex digits"`
+}
+
+type DeviceDeleteOutput struct{ Body DeviceDeleted }
+
 // sdk is Fern's names for the SDK method: client.<group>.<method>() and `cli <group> <method>`.
 func sdk(group, method string, extra map[string]any) map[string]any {
 	extensions := map[string]any{"x-fern-sdk-group-name": group, "x-fern-sdk-method-name": method}
@@ -125,6 +131,17 @@ func Routes(env Env) []humaworkers.Route {
 				Errors:     []int{http.StatusNotFound},
 				Extensions: sdk("devices", "history", nil),
 			}, env.deviceReports)
+		}},
+		{Method: http.MethodDelete, Path: "/api/devices/{id}", OperationID: "deleteDevice", Register: func(api huma.API) {
+			// Not an MCP tool: it changes data, with the write token.
+			huma.Register(api, humamcp.Expose(huma.Operation{
+				OperationID: "deleteDevice", Method: http.MethodDelete, Path: "/api/devices/{id}",
+				Summary:     "Forget a machine and its reports (the write token)",
+				Description: "For a machine that is gone, or an id no longer used. A machine that reports again comes back.",
+				Tags:        []string{"devices"},
+				Errors:      []int{http.StatusNotFound},
+				Extensions:  sdk("devices", "delete", nil),
+			}, false), env.deviceDelete)
 		}},
 	}
 }

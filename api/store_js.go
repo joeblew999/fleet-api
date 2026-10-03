@@ -46,3 +46,12 @@ func (s D1Store) Devices(context.Context) ([]DeviceRow, error) {
 func (s D1Store) Reports(_ context.Context, id string, since int64, limit int) ([]DeviceRow, error) {
 	return d1.Query[DeviceRow](s.DB, "SELECT id, ts, received, report FROM device_reports WHERE id = ? AND received >= ? ORDER BY ts DESC LIMIT ?", id, since, limit)
 }
+
+func (s D1Store) Forget(_ context.Context, id string) (int, bool, error) {
+	reports, err := d1.Query[DeviceRow](s.DB, "DELETE FROM device_reports WHERE id = ? RETURNING id", id)
+	if err != nil {
+		return 0, false, err
+	}
+	devices, err := d1.Query[DeviceRow](s.DB, "DELETE FROM devices WHERE id = ? RETURNING id", id)
+	return len(reports), len(devices) > 0, err
+}

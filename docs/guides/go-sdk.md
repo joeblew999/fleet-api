@@ -26,8 +26,10 @@ reader := client.NewClient(option.WithBaseURL("https://fleet-api.gedw99.workers.
 list, err := reader.Devices.List(ctx)                                        // every machine
 view, err := reader.Devices.Get(ctx, &fleet.GetDevicesRequest{ID: id})       // one, with its conditions
 history, err := reader.Devices.History(ctx, &fleet.HistoryDevicesRequest{ID: id})
+
+gone, err := machine.Devices.Delete(ctx, &fleet.DeleteDevicesRequest{ID: id})        // forget it, with the write token
 ```
 
 Enums are Go types, optional values pointers, a newer Worker's fields are kept in `ExtraProperties`. Errors are typed by status: `*fleet.UnauthorizedError` (401), `*fleet.UnprocessableEntityError` (422, with the locations), `*fleet.NotFoundError` (404), `*fleet.ContentTooLargeError` (413).
 
-After a contract change: `mise run spec`, then `mise run sdk:publish`, and commit `sdk/go/` with it. The TypeScript SDK: `mise run sdk:gen typescript-dist` (`FleetClient`, option `token`).
+After a contract change: `mise run spec`, then `mise run sdk:publish`, and commit `sdk/go/` with it. The TypeScript SDK: `mise run sdk:gen typescript-dist` (`FleetClient`, option `token`; `serialization.DeviceReport.parse` checks a report as JSON, [Post one from a machine](report.md#post-one-from-a-machine)).

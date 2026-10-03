@@ -72,7 +72,7 @@ func origin(r *http.Request) string {
 }
 
 // authorize is the contract's security, enforced: an operation needs a token unless its Security is
-// empty (hello). Posting needs the write token; reading takes either.
+// empty (hello). Posting and deleting need the write token; reading takes either.
 func (env Env) authorize(api huma.API) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		op := ctx.Operation()
@@ -211,6 +211,21 @@ func (env Env) deviceReports(ctx context.Context, in *DeviceReportsInput) (*Devi
 		out.Body.Reports = append(out.Body.Reports, DeviceStored{Report: PostedReport(row.Report), Received: row.Received})
 	}
 	return out, nil
+}
+
+func (env Env) deviceDelete(ctx context.Context, in *DeviceDeleteInput) (*DeviceDeleteOutput, error) {
+	store, err := env.Store()
+	if err != nil {
+		return nil, err
+	}
+	reports, found, err := store.Forget(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, huma.Error404NotFound("no machine " + in.ID + " has reported")
+	}
+	return &DeviceDeleteOutput{Body: DeviceDeleted{ID: in.ID, Reports: int32(reports)}}, nil
 }
 
 // view is a device's row as the API shows it, with its conditions at now.

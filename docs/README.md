@@ -13,9 +13,9 @@ Each machine posts a report about itself; anyone with the read token reads the f
 ## What you get
 
 - **One report per machine** ([The report](guides/report.md)): what it is (host, CPU, memory, disks, power, battery, lid, sleep), the Claude worker on it (`rig`) and who holds it (`claims`). Every section says ok, none or unknown, so a zero is always a measured zero.
-- **Four routes** ([Routes](reference/routes.md)): post a report, list the machines, one machine with its conditions, a machine's history of the last 7 days.
+- **Five routes** ([Routes](reference/routes.md)): post a report, list the machines, one machine with its conditions, a machine's history of the last 7 days, forget a machine.
 - **Two tokens** ([Tokens](guides/tokens.md)): machines write, readers read.
-- **A Go SDK** another repo can `go get` ([The Go SDK](guides/go-sdk.md)), a TypeScript SDK, and the read routes as MCP tools at `/api/mcp`.
+- **A Go SDK** another repo can `go get` ([The Go SDK](guides/go-sdk.md)), a TypeScript SDK that checks a report against the schema before it posts it ([Post a report](guides/report.md#post-one-from-a-machine)), and the read routes as MCP tools at `/api/mcp`.
 
 Deployed at `https://fleet-api.gedw99.workers.dev`.
 

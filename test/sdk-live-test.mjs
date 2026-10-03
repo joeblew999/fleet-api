@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 const origin = process.argv[2];
-const { FleetClient, Fleet } = await import(pathToFileURL(`${process.cwd()}/sdk/out/typescript-dist/esm/index.mjs`));
+const { FleetClient, Fleet, serialization } = await import(pathToFileURL(`${process.cwd()}/sdk/out/typescript-dist/esm/index.mjs`));
 const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write } = process.env;
 
 let failed = 0;
@@ -20,7 +20,10 @@ const reader = new FleetClient({ baseUrl: origin, token: read, maxRetries: 0 });
 const id = "0000000000000001";
 const example = JSON.parse(readFileSync("api/example_report.json", "utf8"));
 const ts = Date.now();
-const body = { ...example, id, ts, reason: "once", next_s: 0, host: { ...example.host, name: "live-test" } };
+// The report as JSON, checked and typed by the SDK's own schema (the serde layer), as a machine does.
+const body = serialization.DeviceReport.parseOrThrow({ ...example, id, ts, reason: "once", next_s: 0, host: { ...example.host, name: "live-test" } });
+const invalid = serialization.DeviceReport.parse({ ...example, reason: "whenever", host: undefined });
+check("the SDK's schema refuses a bad report before it is sent", !invalid.ok && invalid.errors.some(e => e.path.join(".") === "reason"), invalid);
 
 const posted = await attempt(machine.devices.report({ id, body }));
 check("devices.report() with the write token", posted.value?.id === id && posted.value.duplicate === false, posted.error ?? posted.value);
@@ -37,5 +40,13 @@ const bad = await attempt(machine.devices.report({ id, body: { ...body, ts: ts +
 check("a refused report is an UnprocessableEntityError with the location", bad.error instanceof Fleet.UnprocessableEntityError && bad.error.body?.errors?.some(e => e.location === "body.battery.percent"), bad.error ?? bad.value);
 const missing = await attempt(reader.devices.get({ id: "ffffffffffffffff" }));
 check("a machine that never reported is a NotFoundError", missing.error instanceof Fleet.NotFoundError, missing.error ?? missing.value);
+
+const gone = "0000000000000003";
+const second = await attempt(machine.devices.report({ id: gone, body: { ...body, id: gone } }));
+check("devices.report() for a second test machine", second.value?.id === gone, second.error ?? second.value);
+const deleted = await attempt(machine.devices.delete({ id: gone }));
+check("devices.delete() with the write token", deleted.value?.id === gone && deleted.value.reports >= 1, deleted.error ?? deleted.value);
+const deletedAgain = await attempt(machine.devices.delete({ id: gone }));
+check("devices.delete() again is a NotFoundError", deletedAgain.error instanceof Fleet.NotFoundError, deletedAgain.error ?? deletedAgain.value);
 
 process.exit(failed ? 1 : 0);

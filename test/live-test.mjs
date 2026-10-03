@@ -1,6 +1,7 @@
 // Live test of the device API: a report posted with the write token is read back, as posted,
 // through the list, the device's view and its history; the tokens, the rules and the limits hold.
-// It reports as the test machine 0000000000000001 (host live-test), which then stays in the list.
+// It reports as the test machine 0000000000000001 (host live-test), which then stays in the list, and
+// as a second one, 0000000000000002, which it then deletes.
 // Usage, from the project's folder, with FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN set: node test/live-test.mjs <origin>
 import { readFileSync } from "node:fs";
 
@@ -73,5 +74,17 @@ const big = await call("POST", reports, { token: write, body: { ...report, ts: t
 check("a report over 16 KiB is 413", big.status === 413, big.status);
 const unknown = await call("GET", "/api/devices/ffffffffffffffff", { token: read });
 check("a machine that never reported is 404", unknown.status === 404, unknown.status);
+
+const gone = "0000000000000002";
+const second = await call("POST", `/api/devices/${gone}/reports`, { token: write, body: { ...report, id: gone } });
+check("a second test machine reports", second.status === 201, second.json ?? second.text);
+const notByReader = await call("DELETE", `/api/devices/${gone}`, { token: read });
+check("deleting with the read token is 401", notByReader.status === 401, notByReader.status);
+const deleted = await call("DELETE", `/api/devices/${gone}`, { token: write });
+check("deleting with the write token forgets it and its reports", deleted.status === 200 && deleted.json?.id === gone && deleted.json.reports >= 1, deleted.json ?? deleted.text);
+const afterDelete = await call("GET", `/api/devices/${gone}`, { token: read });
+check("a deleted machine is 404", afterDelete.status === 404, afterDelete.status);
+const deletedAgain = await call("DELETE", `/api/devices/${gone}`, { token: write });
+check("deleting it again is 404", deletedAgain.status === 404, deletedAgain.status);
 
 process.exit(failed ? 1 : 0);

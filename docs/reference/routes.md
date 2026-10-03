@@ -12,6 +12,7 @@ parent: Reference
 | `listDevices` | `GET /api/devices` | read or write | `DeviceList`: `now`, `devices[]` (a `DeviceView` each), by id |
 | `getDevice` | `GET /api/devices/{id}` | read or write | `DeviceView`: `report` (as posted), `received`, `due`, `conditions`; 404 if it never reported |
 | `listDeviceReports` | `GET /api/devices/{id}/reports?since=&limit=` | read or write | `DeviceHistory`: `id`, `reports[]` (`report`, `received`), newest first; `since` in ms of receipt, `limit` 1 to 500 (50) |
+| `deleteDevice` (not a tool) | `DELETE /api/devices/{id}` | write | `DeviceDeleted`: `id`, `reports` (how many went with it); 404 if it never reported. A machine that reports again comes back |
 | `hello` | `GET /api/hello` | none | `message` |
 | | `GET /api/openapi.json` | none | The spec, with the request's origin as its server |
 | | `POST /api/mcp` | read, as `Authorization` | The read operations and `hello` as MCP tools |

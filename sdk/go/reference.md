@@ -73,6 +73,66 @@ client.Devices.Get(
 </dl>
 </details>
 
+<details><summary><code>client.Devices.Delete(ID) -> *fleet.DeviceDeleted</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+For a machine that is gone, or an id no longer used. A machine that reports again comes back.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```go
+request := &fleet.DeleteDevicesRequest{
+    ID: "3f9a1c0b7d2e4a65",
+}
+client.Devices.Delete(
+    context.TODO(),
+    request,
+)
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**id:** `string` — The machine id: 16 lower-case hex digits
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
 <details><summary><code>client.Devices.History(ID) -> *fleet.DeviceHistory</code></summary>
 <dl>
 <dd>
@@ -284,6 +344,18 @@ request := &fleet.ReportDevicesRequest{
             LoggedIn: fleet.Bool(
                 true,
             ),
+            Login: &fleet.DeviceRigLogin{
+                AuthMethod: fleet.String(
+                    "claude.ai",
+                ),
+                LoggedIn: fleet.Bool(
+                    true,
+                ),
+                RefreshExpires: fleet.Int64(
+                    int64(1798618406000),
+                ),
+                Status: fleet.DeviceRigLoginStatusOk,
+            },
             SessionRunning: fleet.Bool(
                 true,
             ),

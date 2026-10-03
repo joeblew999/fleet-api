@@ -18,6 +18,8 @@ type Store interface {
 	Devices(ctx context.Context) ([]DeviceRow, error)
 	// Reports is a device's reports received at or after since, newest first, at most limit.
 	Reports(ctx context.Context, id string, since int64, limit int) ([]DeviceRow, error)
+	// Forget removes a device's row and its reports: how many reports went, and whether it had a row.
+	Forget(ctx context.Context, id string) (int, bool, error)
 }
 
 // DeviceRow is a report as kept: as posted (Report), with the columns worked out from it. The json
@@ -98,4 +100,21 @@ func (m *MemStore) Reports(_ context.Context, id string, since int64, limit int)
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+func (m *MemStore) Forget(_ context.Context, id string) (int, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, found := m.devices[id]
+	delete(m.devices, id)
+	kept, gone := m.reports[:0], 0
+	for _, r := range m.reports {
+		if r.ID == id {
+			gone++
+			continue
+		}
+		kept = append(kept, r)
+	}
+	m.reports = kept
+	return gone, found, nil
 }

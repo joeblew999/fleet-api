@@ -10,6 +10,34 @@ import (
 )
 
 var (
+	deleteDevicesRequestFieldID = big.NewInt(1 << 0)
+)
+
+type DeleteDevicesRequest struct {
+	// The machine id: 16 lower-case hex digits
+	ID string `json:"-" url:"-"`
+
+	// Private bitmask of fields set to an explicit value and therefore not to be omitted
+	explicitFields *big.Int `json:"-" url:"-"`
+}
+
+func (d *DeleteDevicesRequest) require(field *big.Int) {
+	next := new(big.Int)
+	if d.explicitFields != nil {
+		next.Set(d.explicitFields)
+	}
+	next.Or(next, field)
+	d.explicitFields = next
+}
+
+// SetID sets the ID field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeleteDevicesRequest) SetID(id string) {
+	d.ID = id
+	d.require(deleteDevicesRequestFieldID)
+}
+
+var (
 	getDevicesRequestFieldID = big.NewInt(1 << 0)
 )
 
@@ -1015,6 +1043,109 @@ func NewDeviceCPUStatusFromString(s string) (DeviceCPUStatus, error) {
 
 func (d DeviceCPUStatus) Ptr() *DeviceCPUStatus {
 	return &d
+}
+
+var (
+	deviceDeletedFieldID      = big.NewInt(1 << 0)
+	deviceDeletedFieldReports = big.NewInt(1 << 1)
+)
+
+type DeviceDeleted struct {
+	ID string `json:"id" url:"id"`
+	// How many of its reports, of the last 7 days, were deleted with it.
+	Reports int `json:"reports" url:"reports"`
+
+	// Private bitmask of fields set to an explicit value and therefore not to be omitted
+	explicitFields *big.Int `json:"-" url:"-"`
+
+	extraProperties map[string]interface{}
+	rawJSON         json.RawMessage
+}
+
+func (d *DeviceDeleted) GetID() string {
+	if d == nil {
+		return ""
+	}
+	return d.ID
+}
+
+func (d *DeviceDeleted) GetReports() int {
+	if d == nil {
+		return 0
+	}
+	return d.Reports
+}
+
+func (d *DeviceDeleted) GetExtraProperties() map[string]interface{} {
+	if d == nil {
+		return nil
+	}
+	return d.extraProperties
+}
+
+func (d *DeviceDeleted) require(field *big.Int) {
+	next := new(big.Int)
+	if d.explicitFields != nil {
+		next.Set(d.explicitFields)
+	}
+	next.Or(next, field)
+	d.explicitFields = next
+}
+
+// SetID sets the ID field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceDeleted) SetID(id string) {
+	d.ID = id
+	d.require(deviceDeletedFieldID)
+}
+
+// SetReports sets the Reports field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceDeleted) SetReports(reports int) {
+	d.Reports = reports
+	d.require(deviceDeletedFieldReports)
+}
+
+func (d *DeviceDeleted) UnmarshalJSON(data []byte) error {
+	type unmarshaler DeviceDeleted
+	var value unmarshaler
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*d = DeviceDeleted(value)
+	extraProperties, err := internal.ExtractExtraProperties(data, *d)
+	if err != nil {
+		return err
+	}
+	d.extraProperties = extraProperties
+	d.rawJSON = json.RawMessage(data)
+	return nil
+}
+
+func (d *DeviceDeleted) MarshalJSON() ([]byte, error) {
+	type embed DeviceDeleted
+	var marshaler = struct {
+		embed
+	}{
+		embed: embed(*d),
+	}
+	explicitMarshaler := internal.HandleExplicitFields(marshaler, d.explicitFields)
+	return json.Marshal(explicitMarshaler)
+}
+
+func (d *DeviceDeleted) String() string {
+	if d == nil {
+		return "<nil>"
+	}
+	if len(d.rawJSON) > 0 {
+		if value, err := internal.StringifyJSON(d.rawJSON); err == nil {
+			return value
+		}
+	}
+	if value, err := internal.StringifyJSON(d); err == nil {
+		return value
+	}
+	return fmt.Sprintf("%#v", d)
 }
 
 var (
@@ -2902,11 +3033,12 @@ var (
 	deviceRigFieldCommit         = big.NewInt(1 << 1)
 	deviceRigFieldConfigApplied  = big.NewInt(1 << 2)
 	deviceRigFieldLoggedIn       = big.NewInt(1 << 3)
-	deviceRigFieldSessionRunning = big.NewInt(1 << 4)
-	deviceRigFieldStatus         = big.NewInt(1 << 5)
-	deviceRigFieldToolsInstalled = big.NewInt(1 << 6)
-	deviceRigFieldWhy            = big.NewInt(1 << 7)
-	deviceRigFieldWorkDir        = big.NewInt(1 << 8)
+	deviceRigFieldLogin          = big.NewInt(1 << 4)
+	deviceRigFieldSessionRunning = big.NewInt(1 << 5)
+	deviceRigFieldStatus         = big.NewInt(1 << 6)
+	deviceRigFieldToolsInstalled = big.NewInt(1 << 7)
+	deviceRigFieldWhy            = big.NewInt(1 << 8)
+	deviceRigFieldWorkDir        = big.NewInt(1 << 9)
 )
 
 type DeviceRig struct {
@@ -2918,6 +3050,8 @@ type DeviceRig struct {
 	ConfigApplied *bool `json:"config_applied,omitempty" url:"config_applied,omitempty"`
 	// Claude is logged in.
 	LoggedIn *bool `json:"logged_in,omitempty" url:"logged_in,omitempty"`
+	// Claude's login as claude auth status and the stored login say; absent when not read.
+	Login *DeviceRigLogin `json:"login,omitempty" url:"login,omitempty"`
 	// A Claude session is running for the rig.
 	SessionRunning *bool `json:"session_running,omitempty" url:"session_running,omitempty"`
 	// none: claude-rig never set this machine up.
@@ -2962,6 +3096,13 @@ func (d *DeviceRig) GetLoggedIn() *bool {
 		return nil
 	}
 	return d.LoggedIn
+}
+
+func (d *DeviceRig) GetLogin() *DeviceRigLogin {
+	if d == nil {
+		return nil
+	}
+	return d.Login
 }
 
 func (d *DeviceRig) GetSessionRunning() *bool {
@@ -3043,6 +3184,13 @@ func (d *DeviceRig) SetLoggedIn(loggedIn *bool) {
 	d.require(deviceRigFieldLoggedIn)
 }
 
+// SetLogin sets the Login field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceRig) SetLogin(login *DeviceRigLogin) {
+	d.Login = login
+	d.require(deviceRigFieldLogin)
+}
+
 // SetSessionRunning sets the SessionRunning field and marks it as non-optional;
 // this prevents an empty or null value for this field from being omitted during serialization.
 func (d *DeviceRig) SetSessionRunning(sessionRunning *bool) {
@@ -3122,6 +3270,205 @@ func (d *DeviceRig) String() string {
 		return value
 	}
 	return fmt.Sprintf("%#v", d)
+}
+
+var (
+	deviceRigLoginFieldAuthMethod        = big.NewInt(1 << 0)
+	deviceRigLoginFieldLoggedIn          = big.NewInt(1 << 1)
+	deviceRigLoginFieldRefreshExpires    = big.NewInt(1 << 2)
+	deviceRigLoginFieldRefreshExpiresWhy = big.NewInt(1 << 3)
+	deviceRigLoginFieldStatus            = big.NewInt(1 << 4)
+	deviceRigLoginFieldWhy               = big.NewInt(1 << 5)
+)
+
+type DeviceRigLogin struct {
+	// How it is logged in, as claude auth status names it: claude.ai.
+	AuthMethod *string `json:"auth_method,omitempty" url:"auth_method,omitempty"`
+	// What claude auth status says.
+	LoggedIn *bool `json:"logged_in,omitempty" url:"logged_in,omitempty"`
+	// When the stored login's refresh token expires, Unix milliseconds; absent when not known.
+	RefreshExpires *int64 `json:"refresh_expires,omitempty" url:"refresh_expires,omitempty"`
+	// Why refresh_expires is absent.
+	RefreshExpiresWhy *string `json:"refresh_expires_why,omitempty" url:"refresh_expires_why,omitempty"`
+	// ok: claude auth status answered.
+	Status DeviceRigLoginStatus `json:"status" url:"status"`
+	Why    *string              `json:"why,omitempty" url:"why,omitempty"`
+
+	// Private bitmask of fields set to an explicit value and therefore not to be omitted
+	explicitFields *big.Int `json:"-" url:"-"`
+
+	ExtraProperties map[string]interface{} `json:"-" url:"-"`
+
+	rawJSON json.RawMessage
+}
+
+func (d *DeviceRigLogin) GetAuthMethod() *string {
+	if d == nil {
+		return nil
+	}
+	return d.AuthMethod
+}
+
+func (d *DeviceRigLogin) GetLoggedIn() *bool {
+	if d == nil {
+		return nil
+	}
+	return d.LoggedIn
+}
+
+func (d *DeviceRigLogin) GetRefreshExpires() *int64 {
+	if d == nil {
+		return nil
+	}
+	return d.RefreshExpires
+}
+
+func (d *DeviceRigLogin) GetRefreshExpiresWhy() *string {
+	if d == nil {
+		return nil
+	}
+	return d.RefreshExpiresWhy
+}
+
+func (d *DeviceRigLogin) GetStatus() DeviceRigLoginStatus {
+	if d == nil {
+		return ""
+	}
+	return d.Status
+}
+
+func (d *DeviceRigLogin) GetWhy() *string {
+	if d == nil {
+		return nil
+	}
+	return d.Why
+}
+
+func (d *DeviceRigLogin) GetExtraProperties() map[string]interface{} {
+	if d == nil {
+		return nil
+	}
+	return d.ExtraProperties
+}
+
+func (d *DeviceRigLogin) require(field *big.Int) {
+	next := new(big.Int)
+	if d.explicitFields != nil {
+		next.Set(d.explicitFields)
+	}
+	next.Or(next, field)
+	d.explicitFields = next
+}
+
+// SetAuthMethod sets the AuthMethod field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceRigLogin) SetAuthMethod(authMethod *string) {
+	d.AuthMethod = authMethod
+	d.require(deviceRigLoginFieldAuthMethod)
+}
+
+// SetLoggedIn sets the LoggedIn field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceRigLogin) SetLoggedIn(loggedIn *bool) {
+	d.LoggedIn = loggedIn
+	d.require(deviceRigLoginFieldLoggedIn)
+}
+
+// SetRefreshExpires sets the RefreshExpires field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceRigLogin) SetRefreshExpires(refreshExpires *int64) {
+	d.RefreshExpires = refreshExpires
+	d.require(deviceRigLoginFieldRefreshExpires)
+}
+
+// SetRefreshExpiresWhy sets the RefreshExpiresWhy field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceRigLogin) SetRefreshExpiresWhy(refreshExpiresWhy *string) {
+	d.RefreshExpiresWhy = refreshExpiresWhy
+	d.require(deviceRigLoginFieldRefreshExpiresWhy)
+}
+
+// SetStatus sets the Status field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceRigLogin) SetStatus(status DeviceRigLoginStatus) {
+	d.Status = status
+	d.require(deviceRigLoginFieldStatus)
+}
+
+// SetWhy sets the Why field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceRigLogin) SetWhy(why *string) {
+	d.Why = why
+	d.require(deviceRigLoginFieldWhy)
+}
+
+func (d *DeviceRigLogin) UnmarshalJSON(data []byte) error {
+	type embed DeviceRigLogin
+	var unmarshaler = struct {
+		embed
+	}{
+		embed: embed(*d),
+	}
+	if err := json.Unmarshal(data, &unmarshaler); err != nil {
+		return err
+	}
+	*d = DeviceRigLogin(unmarshaler.embed)
+	extraProperties, err := internal.ExtractExtraProperties(data, *d)
+	if err != nil {
+		return err
+	}
+	d.ExtraProperties = extraProperties
+	d.rawJSON = json.RawMessage(data)
+	return nil
+}
+
+func (d *DeviceRigLogin) MarshalJSON() ([]byte, error) {
+	type embed DeviceRigLogin
+	var marshaler = struct {
+		embed
+	}{
+		embed: embed(*d),
+	}
+	explicitMarshaler := internal.HandleExplicitFields(marshaler, d.explicitFields)
+	return internal.MarshalJSONWithExtraProperties(explicitMarshaler, d.ExtraProperties)
+}
+
+func (d *DeviceRigLogin) String() string {
+	if d == nil {
+		return "<nil>"
+	}
+	if len(d.rawJSON) > 0 {
+		if value, err := internal.StringifyJSON(d.rawJSON); err == nil {
+			return value
+		}
+	}
+	if value, err := internal.StringifyJSON(d); err == nil {
+		return value
+	}
+	return fmt.Sprintf("%#v", d)
+}
+
+// ok: claude auth status answered.
+type DeviceRigLoginStatus string
+
+const (
+	DeviceRigLoginStatusOk      DeviceRigLoginStatus = "ok"
+	DeviceRigLoginStatusUnknown DeviceRigLoginStatus = "unknown"
+)
+
+func NewDeviceRigLoginStatusFromString(s string) (DeviceRigLoginStatus, error) {
+	switch s {
+	case "ok":
+		return DeviceRigLoginStatusOk, nil
+	case "unknown":
+		return DeviceRigLoginStatusUnknown, nil
+	}
+	var t DeviceRigLoginStatus
+	return "", fmt.Errorf("%s is not a valid %T", s, t)
+}
+
+func (d DeviceRigLoginStatus) Ptr() *DeviceRigLoginStatus {
+	return &d
 }
 
 // none: claude-rig never set this machine up.
