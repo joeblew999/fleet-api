@@ -213,7 +213,7 @@ client.Devices.History(
 <dl>
 <dd>
 
-Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver.
+Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver. A machine's service token posts only for the device it was enrolled for: another id is 403.
 </dd>
 </dl>
 </dd>

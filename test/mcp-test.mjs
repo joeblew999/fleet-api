@@ -2,32 +2,38 @@
 // Streamable HTTP. Everything runs twice, once per protocol era the server speaks: the stateless
 // 2026-07-28 (every request names its version; server/discover) and the handshake one (initialize,
 // 2025-11-25). The tools must be the read operations, a tool call must answer what the REST route
-// answers, and the caller's token must be what decides. It posts the test machine's report first.
-// Usage, from the project's folder (@modelcontextprotocol/client comes from its node_modules), with
-// FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN set: node test/mcp-test.mjs <origin>
+// answers, and the caller's credentials must be what decides. It posts the test machine's report first.
+// Usage, from the project's folder (@modelcontextprotocol/client comes from its node_modules):
+// node test/mcp-test.mjs <origin>, with FLEET_API_ACCESS_CLIENT_ID and FLEET_API_ACCESS_CLIENT_SECRET
+// set (the test machine's Access service token: the deployed Worker), or FLEET_API_READ_TOKEN and
+// FLEET_API_WRITE_TOKEN.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 const { Client, StreamableHTTPClientTransport } = createRequire(`${process.cwd()}/`)("@modelcontextprotocol/client");
 
 const origin = process.argv[2];
 const endpoint = `${origin}/api/mcp`;
-const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write } = process.env;
+const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write, FLEET_API_ACCESS_CLIENT_ID: clientId, FLEET_API_ACCESS_CLIENT_SECRET: clientSecret } = process.env;
+const viaAccess = Boolean(clientId && clientSecret);
 let failed = 0;
 function check(name, ok, detail) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${ok ? "" : `: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`}`);
   if (!ok) failed++;
 }
-if (!read || !write) {
-  check("FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN are set", false, "on Cloudflare: fnox exec -- ...");
+if (!viaAccess && (!read || !write)) {
+  check("FLEET_API_ACCESS_CLIENT_ID and _SECRET, or FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN, are set", false, "on Cloudflare: fnox exec -- ...");
   process.exit(1);
 }
 const text = result => result.content.map(block => block.text).join("");
-const auth = token => ({ requestInit: { headers: { authorization: `Bearer ${token}` } } });
+// The headers a caller sends: behind Access, the test machine's service token for both.
+const serviceToken = { "cf-access-client-id": clientId, "cf-access-client-secret": clientSecret };
+const as = token => (viaAccess ? serviceToken : { authorization: `Bearer ${token}` });
+const auth = token => ({ requestInit: { headers: as(token) } });
 
 const id = "0000000000000001";
 const example = JSON.parse(readFileSync("api/example_report.json", "utf8"));
 const posted = await fetch(`${origin}/api/devices/${id}/reports`, {
-  method: "POST", headers: { authorization: `Bearer ${write}`, "content-type": "application/json" },
+  method: "POST", headers: { ...as(write), "content-type": "application/json" },
   body: JSON.stringify({ ...example, id, ts: Date.now(), reason: "once", next_s: 0, host: { ...example.host, name: "live-test" } }),
 });
 check("the test machine's report is posted", posted.status === 201, posted.status);
@@ -45,7 +51,7 @@ for (const [era, mode, version] of [["stateless", { pin: "2026-07-28" }, "2026-0
   check(label("getDevice takes the id with its pattern"), byName.getDevice?.inputSchema?.properties?.id?.pattern === "^[0-9a-f]{16}$", byName.getDevice?.inputSchema);
 
   const got = await client.callTool({ name: "getDevice", arguments: { id } });
-  const rest = await (await fetch(`${origin}/api/devices/${id}`, { headers: { authorization: `Bearer ${read}` } })).json();
+  const rest = await (await fetch(`${origin}/api/devices/${id}`, { headers: as(read) })).json();
   check(label("getDevice answers what GET /api/devices/{id} answers"), !got.isError && got.structuredContent?.report?.id === id && got.structuredContent.received === rest.received, { got, rest });
   const history = await client.callTool({ name: "listDeviceReports", arguments: { id, limit: 2 } });
   check(label("listDeviceReports"), !history.isError && history.structuredContent?.reports?.length >= 1, history);
@@ -59,15 +65,21 @@ for (const [era, mode, version] of [["stateless", { pin: "2026-07-28" }, "2026-0
   await client.close();
 }
 
-// Without a token, a call is refused as the REST route refuses it.
-const anonymous = new Client({ name: "mcp-test", version: "1.0.0" }, { versionNegotiation: { mode: "legacy" } });
-await anonymous.connect(new StreamableHTTPClientTransport(new URL(endpoint)));
-const denied = await anonymous.callTool({ name: "listDevices", arguments: {} });
-check("a call without a token is isError 401", denied.isError && JSON.parse(text(denied)).status === 401, denied);
-await anonymous.close();
+if (viaAccess) {
+  // Without credentials Access refuses before the Worker: the MCP client cannot even connect.
+  const refused = await fetch(endpoint, { method: "POST", redirect: "manual", headers: { "content-type": "application/json" }, body: "{}" });
+  check("without credentials /api/mcp is refused at the edge (Access)", [302, 401, 403].includes(refused.status), refused.status);
+} else {
+  // Without a token, a call is refused as the REST route refuses it.
+  const anonymous = new Client({ name: "mcp-test", version: "1.0.0" }, { versionNegotiation: { mode: "legacy" } });
+  await anonymous.connect(new StreamableHTTPClientTransport(new URL(endpoint)));
+  const denied = await anonymous.callTool({ name: "listDevices", arguments: {} });
+  check("a call without a token is isError 401", denied.isError && JSON.parse(text(denied)).status === 401, denied);
+  await anonymous.close();
+}
 
 // The transport's edges, raw.
-const get = await fetch(endpoint, { headers: { accept: "text/event-stream" } });
+const get = await fetch(endpoint, { headers: { accept: "text/event-stream", ...as(read) } });
 check("GET is 405 (no stream)", get.status === 405 && get.headers.get("allow") === "POST", get.status);
 
 process.exit(failed ? 1 : 0);

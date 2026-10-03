@@ -1144,9 +1144,35 @@
       }
     },
     "securitySchemes": {
+      "accessClientId": {
+        "description": "A Cloudflare Access service token's Client ID: a machine's own (mise run access:token -- create)",
+        "in": "header",
+        "name": "CF-Access-Client-Id",
+        "type": "apiKey",
+        "x-fern-header": {
+          "env": "FLEET_API_ACCESS_CLIENT_ID",
+          "name": "accessClientId"
+        }
+      },
+      "accessClientSecret": {
+        "description": "The service token's Client Secret",
+        "in": "header",
+        "name": "CF-Access-Client-Secret",
+        "type": "apiKey",
+        "x-fern-header": {
+          "env": "FLEET_API_ACCESS_CLIENT_SECRET",
+          "name": "accessClientSecret"
+        }
+      },
       "bearer": {
+        "description": "The read or write token (READ_TOKEN, WRITE_TOKEN): kept for one release, then removed",
         "scheme": "bearer",
         "type": "http"
+      },
+      "oidc": {
+        "description": "An access token from the OpenID Connect provider the deployment trusts (OIDC_ISSUER), with the operation's scope",
+        "openIdConnectUrl": "/.well-known/openid-configuration",
+        "type": "openIdConnect"
       }
     }
   },
@@ -1181,7 +1207,7 @@
             },
             "description": "Unauthorized"
           },
-          "default": {
+          "403": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1189,9 +1215,37 @@
                 }
               }
             },
-            "description": "Error"
+            "description": "Forbidden"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
+        "security": [
+          {
+            "accessClientId": [
+              "devices:read"
+            ],
+            "accessClientSecret": []
+          },
+          {
+            "oidc": [
+              "devices:read"
+            ]
+          },
+          {
+            "bearer": [
+              "devices:read"
+            ]
+          }
+        ],
         "summary": "Every machine as last heard from, with its conditions",
         "tags": [
           "devices"
@@ -1241,6 +1295,16 @@
             },
             "description": "Unauthorized"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -1272,7 +1336,25 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "Forget a machine and its reports (the write token)",
+        "security": [
+          {
+            "accessClientId": [
+              "devices:forget"
+            ],
+            "accessClientSecret": []
+          },
+          {
+            "oidc": [
+              "devices:forget"
+            ]
+          },
+          {
+            "bearer": [
+              "devices:forget"
+            ]
+          }
+        ],
+        "summary": "Forget a machine and its reports (devices:forget: a person logged in through Access)",
         "tags": [
           "devices"
         ],
@@ -1318,6 +1400,16 @@
             },
             "description": "Unauthorized"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -1349,6 +1441,24 @@
             "description": "Internal Server Error"
           }
         },
+        "security": [
+          {
+            "accessClientId": [
+              "devices:read"
+            ],
+            "accessClientSecret": []
+          },
+          {
+            "oidc": [
+              "devices:read"
+            ]
+          },
+          {
+            "bearer": [
+              "devices:read"
+            ]
+          }
+        ],
         "summary": "One machine as last heard from, with its conditions",
         "tags": [
           "devices"
@@ -1429,6 +1539,16 @@
             },
             "description": "Unauthorized"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -1460,6 +1580,24 @@
             "description": "Internal Server Error"
           }
         },
+        "security": [
+          {
+            "accessClientId": [
+              "devices:read"
+            ],
+            "accessClientSecret": []
+          },
+          {
+            "oidc": [
+              "devices:read"
+            ]
+          },
+          {
+            "bearer": [
+              "devices:read"
+            ]
+          }
+        ],
         "summary": "A machine's reports of the last 7 days, newest first",
         "tags": [
           "devices"
@@ -1468,7 +1606,7 @@
         "x-fern-sdk-method-name": "history"
       },
       "post": {
-        "description": "Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver.",
+        "description": "Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver. A machine's service token posts only for the device it was enrolled for: another id is 403.",
         "operationId": "postDeviceReport",
         "parameters": [
           {
@@ -1517,6 +1655,16 @@
             },
             "description": "Unauthorized"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "413": {
             "content": {
               "application/problem+json": {
@@ -1548,7 +1696,25 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "Post a machine's report (the write token)",
+        "security": [
+          {
+            "accessClientId": [
+              "devices:write"
+            ],
+            "accessClientSecret": []
+          },
+          {
+            "oidc": [
+              "devices:write"
+            ]
+          },
+          {
+            "bearer": [
+              "devices:write"
+            ]
+          }
+        ],
+        "summary": "Post a machine's report (devices:write: a machine's service token, for its own id)",
         "tags": [
           "devices"
         ],
@@ -1582,7 +1748,7 @@
           }
         },
         "security": [],
-        "summary": "Say hello: the one operation that needs no token",
+        "summary": "Say hello: the one operation that needs no credentials",
         "tags": [
           "meta"
         ],
@@ -1591,11 +1757,6 @@
       }
     }
   },
-  "security": [
-    {
-      "bearer": []
-    }
-  ],
   "servers": [
     {
       "url": "https://fleet-api.gedw99.workers.dev"

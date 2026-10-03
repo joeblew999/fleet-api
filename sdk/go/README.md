@@ -41,8 +41,8 @@ import (
 
 func do() {
     client := client.NewClient(
-        option.WithToken(
-            "<token>",
+        option.WithAccessClientID(
+            "<value>",
         ),
     )
     request := &fleet.ReportDevicesRequest{
@@ -289,6 +289,9 @@ specified on the client so that they're applied on every request, or for an indi
 ```go
 // Specify default options applied on every request.
 client := client.NewClient(
+    option.WithAccessClientID("<YOUR_API_KEY>"),
+    option.WithAccessClientSecret("<YOUR_API_KEY>"),
+    option.WithAccessToken("<YOUR_API_KEY>"),
     option.WithToken("<YOUR_API_KEY>"),
     option.WithHTTPClient(
         &http.Client{
@@ -300,9 +303,16 @@ client := client.NewClient(
 // Specify options for an individual request.
 response, err := client.Devices.Report(
     ...,
-    option.WithToken("<YOUR_API_KEY>"),
+    option.WithAccessClientID("<YOUR_API_KEY>"),
 )
 ```
+
+When credentials are not explicitly provided, the client reads them from the
+following environment variables:
+
+- `FLEET_API_ACCESS_CLIENT_ID`
+- `FLEET_API_ACCESS_CLIENT_SECRET`
+- `FLEET_API_ACCESS_TOKEN`
 
 ## Advanced
 

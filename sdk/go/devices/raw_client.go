@@ -51,9 +51,16 @@ func (r *RawClient) List(
 		"https://fleet-api.gedw99.workers.dev",
 	)
 	endpointURL := baseURL + "/api/devices"
+	authHeaders, authErr := r.options.AuthHeadersForEndpoint([][]string{{"accessClientId", "accessClientSecret"}, {"oidc"}, {"bearer"}})
+	if authErr != nil {
+		return nil, authErr
+	}
 	headers := internal.MergeHeaders(
-		r.options.ToHeader(),
-		options.ToHeader(),
+		internal.MergeHeaders(
+			r.options.ToHeader(),
+			options.ToHeader(),
+		),
+		authHeaders,
 	)
 	var response *fleet.DeviceList
 	raw, err := r.caller.Call(
@@ -104,9 +111,16 @@ func (r *RawClient) Get(
 		baseURL+"/api/devices/%v",
 		request.ID,
 	)
+	authHeaders, authErr := r.options.AuthHeadersForEndpoint([][]string{{"accessClientId", "accessClientSecret"}, {"oidc"}, {"bearer"}})
+	if authErr != nil {
+		return nil, authErr
+	}
 	headers := internal.MergeHeaders(
-		r.options.ToHeader(),
-		options.ToHeader(),
+		internal.MergeHeaders(
+			r.options.ToHeader(),
+			options.ToHeader(),
+		),
+		authHeaders,
 	)
 	var response *fleet.DeviceView
 	raw, err := r.caller.Call(
@@ -157,9 +171,16 @@ func (r *RawClient) Delete(
 		baseURL+"/api/devices/%v",
 		request.ID,
 	)
+	authHeaders, authErr := r.options.AuthHeadersForEndpoint([][]string{{"accessClientId", "accessClientSecret"}, {"oidc"}, {"bearer"}})
+	if authErr != nil {
+		return nil, authErr
+	}
 	headers := internal.MergeHeaders(
-		r.options.ToHeader(),
-		options.ToHeader(),
+		internal.MergeHeaders(
+			r.options.ToHeader(),
+			options.ToHeader(),
+		),
+		authHeaders,
 	)
 	var response *fleet.DeviceDeleted
 	raw, err := r.caller.Call(
@@ -217,9 +238,16 @@ func (r *RawClient) History(
 	if len(queryParams) > 0 {
 		endpointURL += "?" + queryParams.Encode()
 	}
+	authHeaders, authErr := r.options.AuthHeadersForEndpoint([][]string{{"accessClientId", "accessClientSecret"}, {"oidc"}, {"bearer"}})
+	if authErr != nil {
+		return nil, authErr
+	}
 	headers := internal.MergeHeaders(
-		r.options.ToHeader(),
-		options.ToHeader(),
+		internal.MergeHeaders(
+			r.options.ToHeader(),
+			options.ToHeader(),
+		),
+		authHeaders,
 	)
 	var response *fleet.DeviceHistory
 	raw, err := r.caller.Call(
@@ -270,9 +298,16 @@ func (r *RawClient) Report(
 		baseURL+"/api/devices/%v/reports",
 		request.ID,
 	)
+	authHeaders, authErr := r.options.AuthHeadersForEndpoint([][]string{{"accessClientId", "accessClientSecret"}, {"oidc"}, {"bearer"}})
+	if authErr != nil {
+		return nil, authErr
+	}
 	headers := internal.MergeHeaders(
-		r.options.ToHeader(),
-		options.ToHeader(),
+		internal.MergeHeaders(
+			r.options.ToHeader(),
+			options.ToHeader(),
+		),
+		authHeaders,
 	)
 	headers.Add("Content-Type", "application/json")
 	var response *fleet.DevicePosted

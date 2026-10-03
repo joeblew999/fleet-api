@@ -4,6 +4,7 @@ package devices
 
 import (
 	context "context"
+	os "os"
 
 	fleet "github.com/joeblew999/fleet-api/sdk/go"
 	core "github.com/joeblew999/fleet-api/sdk/go/core"
@@ -20,6 +21,15 @@ type Client struct {
 }
 
 func NewClient(options *core.RequestOptions) *Client {
+	if options.AccessClientID == "" {
+		options.AccessClientID = os.Getenv("FLEET_API_ACCESS_CLIENT_ID")
+	}
+	if options.AccessClientSecret == "" {
+		options.AccessClientSecret = os.Getenv("FLEET_API_ACCESS_CLIENT_SECRET")
+	}
+	if options.AccessToken == "" {
+		options.AccessToken = os.Getenv("FLEET_API_ACCESS_TOKEN")
+	}
 	return &Client{
 		WithRawResponse: NewRawClient(options),
 		options:         options,
@@ -136,7 +146,7 @@ func (c *Client) History(
 	return response.Body, nil
 }
 
-// Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver.
+// Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver. A machine's service token posts only for the device it was enrolled for: another id is 403.
 //
 // Example:
 //

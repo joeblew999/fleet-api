@@ -5,6 +5,32 @@ api:
   specs:
     - openapi: openapi.json
     - asyncapi: asyncapi.json
+  # How the SDKs authenticate: each operation's own security in the spec (endpoint-security: any one
+  # requirement, all the schemes within it), over these schemes. They restate the contract's
+  # (api/auth.go), which Fern needs here before it routes per operation; TestFernAuthMatchesTheContract
+  # keeps the two the same. Unset, an operation's security that equals the spec's default is dropped,
+  # so the contract sets none and every operation says its own.
+  auth-schemes:
+    accessClientId:
+      header: CF-Access-Client-Id
+      name: accessClientId
+      env: FLEET_API_ACCESS_CLIENT_ID
+    accessClientSecret:
+      header: CF-Access-Client-Secret
+      name: accessClientSecret
+      env: FLEET_API_ACCESS_CLIENT_SECRET
+    oidc:
+      scheme: bearer
+      token:
+        name: accessToken
+        env: FLEET_API_ACCESS_TOKEN
+    bearer:
+      scheme: bearer
+      token:
+        name: token
+        env: FLEET_API_TOKEN
+  auth:
+    endpoint-security: {}
 
 # The groups (mise run sdk:list).
 # Generate one: mise run sdk:gen <group>   (output: sdk/out/<group>)

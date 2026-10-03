@@ -38,6 +38,37 @@ func (c *ContentTooLargeError) GetBody() *ErrorModel {
 	return c.Body
 }
 
+// Forbidden
+type ForbiddenError struct {
+	*core.APIError
+	Body *ErrorModel
+}
+
+func (f *ForbiddenError) UnmarshalJSON(data []byte) error {
+	var body *ErrorModel
+	if err := json.Unmarshal(data, &body); err != nil {
+		return err
+	}
+	f.StatusCode = 403
+	f.Body = body
+	return nil
+}
+
+func (f *ForbiddenError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(f.Body)
+}
+
+func (f *ForbiddenError) Unwrap() error {
+	return f.APIError
+}
+
+func (f *ForbiddenError) GetBody() *ErrorModel {
+	if f == nil {
+		return nil
+	}
+	return f.Body
+}
+
 // Internal Server Error
 type InternalServerError struct {
 	*core.APIError
