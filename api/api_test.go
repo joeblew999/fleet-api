@@ -210,6 +210,16 @@ func TestBadReportsAre422WithTheLocation(t *testing.T) {
 		"a claim that lapses before it began": {func(m map[string]any) { claim(m)["until"] = 1 }, "body.claims.held[0].until"},
 		"a claim id with a space (a tag)":     {func(m map[string]any) { claim(m)["id"] = "a b" }, "body.claims.held[0].id"},
 		"more claims than slots":              {func(m map[string]any) { section(m, "claims")["slots"] = 1; held(m, 2) }, "body.claims.held"},
+		"vms ok without manager_running":      {func(m map[string]any) { delete(section(m, "vms"), "manager_running") }, "body.vms.manager_running"},
+		"vms unknown with a list": {func(m map[string]any) {
+			section(m, "vms")["status"] = "unknown"
+			section(m, "vms")["why"] = "x"
+			delete(section(m, "vms"), "manager_running")
+			delete(section(m, "vms"), "manager")
+		}, "body.vms.list"},
+		"a VM owner with an @":              {func(m map[string]any) { vm(m)["owner"] = "someone@studio-1:repo" }, "body.vms.list[0].owner"},
+		"a VM named twice":                  {func(m map[string]any) { vm(m)["name"] = "IRGO-GOLDEN" }, "body.vms.list[1].name"},
+		"a VM's os not in the enum (a tag)": {func(m map[string]any) { vm(m)["os"] = "plan9" }, "body.vms.list[0].os"},
 	} {
 		status, answer := post(t, srv.URL, edit(t, c.change))
 		if status != 422 || !strings.Contains(answer, `"location":"`+c.location+`"`) {
@@ -221,20 +231,33 @@ func TestBadReportsAre422WithTheLocation(t *testing.T) {
 	}
 }
 
-func TestRigAndClaimsAreOptional(t *testing.T) {
+func TestRigClaimsAndVMsAreOptional(t *testing.T) {
 	srv, _ := server(t)
-	body := edit(t, func(m map[string]any) { delete(m, "rig"); delete(m, "claims") })
+	body := edit(t, func(m map[string]any) { delete(m, "rig"); delete(m, "claims"); delete(m, "vms") })
 	if status, answer := post(t, srv.URL, body); status != 201 {
-		t.Fatalf("without rig and claims: %d %s", status, answer)
+		t.Fatalf("without rig, claims and vms: %d %s", status, answer)
 	}
 	body = edit(t, func(m map[string]any) {
 		m["ts"] = 1790842406356
 		m["rig"] = map[string]any{"status": "none"}
 		m["claims"] = map[string]any{"status": "unknown", "why": "the claims folder is not readable"}
+		m["vms"] = map[string]any{"status": "none"}
 	})
 	if status, answer := post(t, srv.URL, body); status != 201 {
-		t.Fatalf("rig none, claims unknown: %d %s", status, answer)
+		t.Fatalf("rig none, claims unknown, vms none: %d %s", status, answer)
 	}
+	// The manager closed: the VMs the tool knows of, every one stopped.
+	body = edit(t, func(m map[string]any) {
+		m["ts"] = 1790842406357
+		section(m, "vms")["manager_running"] = false
+	})
+	if status, answer := post(t, srv.URL, body); status != 201 {
+		t.Fatalf("vms with the manager closed: %d %s", status, answer)
+	}
+}
+
+func vm(m map[string]any) map[string]any {
+	return section(m, "vms")["list"].([]any)[0].(map[string]any)
 }
 
 func claim(m map[string]any) map[string]any {

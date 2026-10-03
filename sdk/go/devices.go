@@ -2511,6 +2511,7 @@ var (
 	deviceReportFieldSleep   = big.NewInt(1 << 14)
 	deviceReportFieldTool    = big.NewInt(1 << 15)
 	deviceReportFieldTs      = big.NewInt(1 << 16)
+	deviceReportFieldVms     = big.NewInt(1 << 17)
 )
 
 type DeviceReport struct {
@@ -2539,6 +2540,8 @@ type DeviceReport struct {
 	Tool   *DeviceTool  `json:"tool" url:"tool"`
 	// When the device read this, by its own clock, Unix milliseconds. Lateness is judged by when the Worker received it, never by this.
 	Ts int64 `json:"ts" url:"ts"`
+	// The virtual machines on this machine; absent when the reporting tool does not know.
+	Vms *DeviceVMs `json:"vms,omitempty" url:"vms,omitempty"`
 
 	// Private bitmask of fields set to an explicit value and therefore not to be omitted
 	explicitFields *big.Int `json:"-" url:"-"`
@@ -2665,6 +2668,13 @@ func (d *DeviceReport) GetTs() int64 {
 		return 0
 	}
 	return d.Ts
+}
+
+func (d *DeviceReport) GetVms() *DeviceVMs {
+	if d == nil {
+		return nil
+	}
+	return d.Vms
 }
 
 func (d *DeviceReport) GetExtraProperties() map[string]interface{} {
@@ -2800,6 +2810,13 @@ func (d *DeviceReport) SetTool(tool *DeviceTool) {
 func (d *DeviceReport) SetTs(ts int64) {
 	d.Ts = ts
 	d.require(deviceReportFieldTs)
+}
+
+// SetVms sets the Vms field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceReport) SetVms(vms *DeviceVMs) {
+	d.Vms = vms
+	d.require(deviceReportFieldVms)
 }
 
 func (d *DeviceReport) UnmarshalJSON(data []byte) error {
@@ -3613,6 +3630,190 @@ func (d *DeviceTool) String() string {
 }
 
 var (
+	deviceVMsFieldList           = big.NewInt(1 << 0)
+	deviceVMsFieldManager        = big.NewInt(1 << 1)
+	deviceVMsFieldManagerRunning = big.NewInt(1 << 2)
+	deviceVMsFieldStatus         = big.NewInt(1 << 3)
+	deviceVMsFieldWhy            = big.NewInt(1 << 4)
+)
+
+type DeviceVMs struct {
+	List []*DeviceVM `json:"list,omitempty" url:"list,omitempty"`
+	// What runs them: utm.
+	Manager *string `json:"manager,omitempty" url:"manager,omitempty"`
+	// The manager is running. When it is not, every VM is stopped, and the list is what the reporting tool knows of them.
+	ManagerRunning *bool `json:"manager_running,omitempty" url:"manager_running,omitempty"`
+	// none: no VM manager on this machine.
+	Status DeviceVMsStatus `json:"status" url:"status"`
+	Why    *string         `json:"why,omitempty" url:"why,omitempty"`
+
+	// Private bitmask of fields set to an explicit value and therefore not to be omitted
+	explicitFields *big.Int `json:"-" url:"-"`
+
+	ExtraProperties map[string]interface{} `json:"-" url:"-"`
+
+	rawJSON json.RawMessage
+}
+
+func (d *DeviceVMs) GetList() []*DeviceVM {
+	if d == nil {
+		return nil
+	}
+	return d.List
+}
+
+func (d *DeviceVMs) GetManager() *string {
+	if d == nil {
+		return nil
+	}
+	return d.Manager
+}
+
+func (d *DeviceVMs) GetManagerRunning() *bool {
+	if d == nil {
+		return nil
+	}
+	return d.ManagerRunning
+}
+
+func (d *DeviceVMs) GetStatus() DeviceVMsStatus {
+	if d == nil {
+		return ""
+	}
+	return d.Status
+}
+
+func (d *DeviceVMs) GetWhy() *string {
+	if d == nil {
+		return nil
+	}
+	return d.Why
+}
+
+func (d *DeviceVMs) GetExtraProperties() map[string]interface{} {
+	if d == nil {
+		return nil
+	}
+	return d.ExtraProperties
+}
+
+func (d *DeviceVMs) require(field *big.Int) {
+	next := new(big.Int)
+	if d.explicitFields != nil {
+		next.Set(d.explicitFields)
+	}
+	next.Or(next, field)
+	d.explicitFields = next
+}
+
+// SetList sets the List field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVMs) SetList(list []*DeviceVM) {
+	d.List = list
+	d.require(deviceVMsFieldList)
+}
+
+// SetManager sets the Manager field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVMs) SetManager(manager *string) {
+	d.Manager = manager
+	d.require(deviceVMsFieldManager)
+}
+
+// SetManagerRunning sets the ManagerRunning field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVMs) SetManagerRunning(managerRunning *bool) {
+	d.ManagerRunning = managerRunning
+	d.require(deviceVMsFieldManagerRunning)
+}
+
+// SetStatus sets the Status field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVMs) SetStatus(status DeviceVMsStatus) {
+	d.Status = status
+	d.require(deviceVMsFieldStatus)
+}
+
+// SetWhy sets the Why field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVMs) SetWhy(why *string) {
+	d.Why = why
+	d.require(deviceVMsFieldWhy)
+}
+
+func (d *DeviceVMs) UnmarshalJSON(data []byte) error {
+	type embed DeviceVMs
+	var unmarshaler = struct {
+		embed
+	}{
+		embed: embed(*d),
+	}
+	if err := json.Unmarshal(data, &unmarshaler); err != nil {
+		return err
+	}
+	*d = DeviceVMs(unmarshaler.embed)
+	extraProperties, err := internal.ExtractExtraProperties(data, *d)
+	if err != nil {
+		return err
+	}
+	d.ExtraProperties = extraProperties
+	d.rawJSON = json.RawMessage(data)
+	return nil
+}
+
+func (d *DeviceVMs) MarshalJSON() ([]byte, error) {
+	type embed DeviceVMs
+	var marshaler = struct {
+		embed
+	}{
+		embed: embed(*d),
+	}
+	explicitMarshaler := internal.HandleExplicitFields(marshaler, d.explicitFields)
+	return internal.MarshalJSONWithExtraProperties(explicitMarshaler, d.ExtraProperties)
+}
+
+func (d *DeviceVMs) String() string {
+	if d == nil {
+		return "<nil>"
+	}
+	if len(d.rawJSON) > 0 {
+		if value, err := internal.StringifyJSON(d.rawJSON); err == nil {
+			return value
+		}
+	}
+	if value, err := internal.StringifyJSON(d); err == nil {
+		return value
+	}
+	return fmt.Sprintf("%#v", d)
+}
+
+// none: no VM manager on this machine.
+type DeviceVMsStatus string
+
+const (
+	DeviceVMsStatusOk      DeviceVMsStatus = "ok"
+	DeviceVMsStatusNone    DeviceVMsStatus = "none"
+	DeviceVMsStatusUnknown DeviceVMsStatus = "unknown"
+)
+
+func NewDeviceVMsStatusFromString(s string) (DeviceVMsStatus, error) {
+	switch s {
+	case "ok":
+		return DeviceVMsStatusOk, nil
+	case "none":
+		return DeviceVMsStatusNone, nil
+	case "unknown":
+		return DeviceVMsStatusUnknown, nil
+	}
+	var t DeviceVMsStatus
+	return "", fmt.Errorf("%s is not a valid %T", s, t)
+}
+
+func (d DeviceVMsStatus) Ptr() *DeviceVMsStatus {
+	return &d
+}
+
+var (
 	deviceViewFieldConditions = big.NewInt(1 << 0)
 	deviceViewFieldDue        = big.NewInt(1 << 1)
 	deviceViewFieldReceived   = big.NewInt(1 << 2)
@@ -3748,4 +3949,206 @@ func (d *DeviceView) String() string {
 		return value
 	}
 	return fmt.Sprintf("%#v", d)
+}
+
+var (
+	deviceVMFieldKeepRunning  = big.NewInt(1 << 0)
+	deviceVMFieldKeeperStarts = big.NewInt(1 << 1)
+	deviceVMFieldName         = big.NewInt(1 << 2)
+	deviceVMFieldOs           = big.NewInt(1 << 3)
+	deviceVMFieldOwner        = big.NewInt(1 << 4)
+	deviceVMFieldState        = big.NewInt(1 << 5)
+)
+
+type DeviceVM struct {
+	// The machine starts it again whenever it stops.
+	KeepRunning *bool `json:"keep_running,omitempty" url:"keep_running,omitempty"`
+	// How many times the machine's keeper has started it since the keeper began.
+	KeeperStarts *int   `json:"keeper_starts,omitempty" url:"keeper_starts,omitempty"`
+	Name         string `json:"name" url:"name"`
+	// The system inside; absent when not known.
+	Os *DeviceVMOs `json:"os,omitempty" url:"os,omitempty"`
+	// Who made it: an agent, a repository or a tool. Never a person's user name or address, so no @.
+	Owner *string `json:"owner,omitempty" url:"owner,omitempty"`
+	// As the manager says it: started, stopped, paused, starting, stopping.
+	State string `json:"state" url:"state"`
+
+	// Private bitmask of fields set to an explicit value and therefore not to be omitted
+	explicitFields *big.Int `json:"-" url:"-"`
+
+	ExtraProperties map[string]interface{} `json:"-" url:"-"`
+
+	rawJSON json.RawMessage
+}
+
+func (d *DeviceVM) GetKeepRunning() *bool {
+	if d == nil {
+		return nil
+	}
+	return d.KeepRunning
+}
+
+func (d *DeviceVM) GetKeeperStarts() *int {
+	if d == nil {
+		return nil
+	}
+	return d.KeeperStarts
+}
+
+func (d *DeviceVM) GetName() string {
+	if d == nil {
+		return ""
+	}
+	return d.Name
+}
+
+func (d *DeviceVM) GetOs() *DeviceVMOs {
+	if d == nil {
+		return nil
+	}
+	return d.Os
+}
+
+func (d *DeviceVM) GetOwner() *string {
+	if d == nil {
+		return nil
+	}
+	return d.Owner
+}
+
+func (d *DeviceVM) GetState() string {
+	if d == nil {
+		return ""
+	}
+	return d.State
+}
+
+func (d *DeviceVM) GetExtraProperties() map[string]interface{} {
+	if d == nil {
+		return nil
+	}
+	return d.ExtraProperties
+}
+
+func (d *DeviceVM) require(field *big.Int) {
+	next := new(big.Int)
+	if d.explicitFields != nil {
+		next.Set(d.explicitFields)
+	}
+	next.Or(next, field)
+	d.explicitFields = next
+}
+
+// SetKeepRunning sets the KeepRunning field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVM) SetKeepRunning(keepRunning *bool) {
+	d.KeepRunning = keepRunning
+	d.require(deviceVMFieldKeepRunning)
+}
+
+// SetKeeperStarts sets the KeeperStarts field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVM) SetKeeperStarts(keeperStarts *int) {
+	d.KeeperStarts = keeperStarts
+	d.require(deviceVMFieldKeeperStarts)
+}
+
+// SetName sets the Name field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVM) SetName(name string) {
+	d.Name = name
+	d.require(deviceVMFieldName)
+}
+
+// SetOs sets the Os field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVM) SetOs(os *DeviceVMOs) {
+	d.Os = os
+	d.require(deviceVMFieldOs)
+}
+
+// SetOwner sets the Owner field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVM) SetOwner(owner *string) {
+	d.Owner = owner
+	d.require(deviceVMFieldOwner)
+}
+
+// SetState sets the State field and marks it as non-optional;
+// this prevents an empty or null value for this field from being omitted during serialization.
+func (d *DeviceVM) SetState(state string) {
+	d.State = state
+	d.require(deviceVMFieldState)
+}
+
+func (d *DeviceVM) UnmarshalJSON(data []byte) error {
+	type embed DeviceVM
+	var unmarshaler = struct {
+		embed
+	}{
+		embed: embed(*d),
+	}
+	if err := json.Unmarshal(data, &unmarshaler); err != nil {
+		return err
+	}
+	*d = DeviceVM(unmarshaler.embed)
+	extraProperties, err := internal.ExtractExtraProperties(data, *d)
+	if err != nil {
+		return err
+	}
+	d.ExtraProperties = extraProperties
+	d.rawJSON = json.RawMessage(data)
+	return nil
+}
+
+func (d *DeviceVM) MarshalJSON() ([]byte, error) {
+	type embed DeviceVM
+	var marshaler = struct {
+		embed
+	}{
+		embed: embed(*d),
+	}
+	explicitMarshaler := internal.HandleExplicitFields(marshaler, d.explicitFields)
+	return internal.MarshalJSONWithExtraProperties(explicitMarshaler, d.ExtraProperties)
+}
+
+func (d *DeviceVM) String() string {
+	if d == nil {
+		return "<nil>"
+	}
+	if len(d.rawJSON) > 0 {
+		if value, err := internal.StringifyJSON(d.rawJSON); err == nil {
+			return value
+		}
+	}
+	if value, err := internal.StringifyJSON(d); err == nil {
+		return value
+	}
+	return fmt.Sprintf("%#v", d)
+}
+
+// The system inside; absent when not known.
+type DeviceVMOs string
+
+const (
+	DeviceVMOsWindows DeviceVMOs = "windows"
+	DeviceVMOsLinux   DeviceVMOs = "linux"
+	DeviceVMOsDarwin  DeviceVMOs = "darwin"
+)
+
+func NewDeviceVMOsFromString(s string) (DeviceVMOs, error) {
+	switch s {
+	case "windows":
+		return DeviceVMOsWindows, nil
+	case "linux":
+		return DeviceVMOsLinux, nil
+	case "darwin":
+		return DeviceVMOsDarwin, nil
+	}
+	var t DeviceVMOs
+	return "", fmt.Errorf("%s is not a valid %T", s, t)
+}
+
+func (d DeviceVMOs) Ptr() *DeviceVMOs {
+	return &d
 }

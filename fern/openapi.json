@@ -593,7 +593,26 @@
               "name": "claude-rig",
               "version": "4fd9d8e"
             },
-            "ts": 1790842406355
+            "ts": 1790842406355,
+            "vms": {
+              "list": [
+                {
+                  "keep_running": true,
+                  "keeper_starts": 1,
+                  "name": "claude-rig-linux",
+                  "os": "linux",
+                  "owner": "claude-rig",
+                  "state": "started"
+                },
+                {
+                  "name": "irgo-golden",
+                  "state": "stopped"
+                }
+              ],
+              "manager": "utm",
+              "manager_running": true,
+              "status": "ok"
+            }
           }
         ],
         "properties": {
@@ -675,6 +694,10 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "vms": {
+            "$ref": "#/components/schemas/DeviceVMs",
+            "description": "The virtual machines on this machine; absent when the reporting tool does not know."
           }
         },
         "required": [
@@ -848,6 +871,89 @@
         "required": [
           "version",
           "command"
+        ],
+        "type": "object"
+      },
+      "DeviceVM": {
+        "additionalProperties": true,
+        "properties": {
+          "keep_running": {
+            "description": "The machine starts it again whenever it stops.",
+            "type": "boolean"
+          },
+          "keeper_starts": {
+            "description": "How many times the machine's keeper has started it since the keeper began.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "os": {
+            "description": "The system inside; absent when not known.",
+            "enum": [
+              "windows",
+              "linux",
+              "darwin"
+            ],
+            "type": "string"
+          },
+          "owner": {
+            "description": "Who made it: an agent, a repository or a tool. Never a person's user name or address, so no @.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "state": {
+            "description": "As the manager says it: started, stopped, paused, starting, stopping.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "state"
+        ],
+        "type": "object"
+      },
+      "DeviceVMs": {
+        "additionalProperties": true,
+        "properties": {
+          "list": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceVM"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
+          "manager": {
+            "description": "What runs them: utm.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "manager_running": {
+            "description": "The manager is running. When it is not, every VM is stopped, and the list is what the reporting tool knows of them.",
+            "type": "boolean"
+          },
+          "status": {
+            "description": "none: no VM manager on this machine.",
+            "enum": [
+              "ok",
+              "none",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "why": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },

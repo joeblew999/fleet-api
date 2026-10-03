@@ -320,6 +320,35 @@ request := &fleet.ReportDevicesRequest{
             Version: "4fd9d8e",
         },
         Ts: int64(1790842406355),
+        Vms: &fleet.DeviceVMs{
+            List: []*fleet.DeviceVM{
+                &fleet.DeviceVM{
+                    KeepRunning: fleet.Bool(
+                        true,
+                    ),
+                    KeeperStarts: fleet.Int(
+                        1,
+                    ),
+                    Name: "claude-rig-linux",
+                    Os: fleet.DeviceVMOsLinux.Ptr(),
+                    Owner: fleet.String(
+                        "claude-rig",
+                    ),
+                    State: "started",
+                },
+                &fleet.DeviceVM{
+                    Name: "irgo-golden",
+                    State: "stopped",
+                },
+            },
+            Manager: fleet.String(
+                "utm",
+            ),
+            ManagerRunning: fleet.Bool(
+                true,
+            ),
+            Status: fleet.DeviceVMsStatusOk,
+        },
     },
 }
 client.Devices.Report(
