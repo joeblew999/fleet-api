@@ -42,7 +42,7 @@ mise run live-test                       # always after a deploy: every route, t
 ## 4. Read the fleet from anywhere
 
 ```sh
-fnox exec -- sh -c 'curl -s -H "authorization: Bearer $READ_TOKEN" https://fleet-api.gedw99.workers.dev/api/devices'
+fnox exec -- sh -c 'curl -s -H "authorization: Bearer $FLEET_API_READ_TOKEN" https://fleet-api.gedw99.workers.dev/api/devices'
 ```
 
 From Go: [The Go SDK](guides/go-sdk.md). From an agent: the read routes are MCP tools at `/api/mcp`, with the read token as `Authorization: Bearer`.

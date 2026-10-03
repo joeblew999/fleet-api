@@ -4,21 +4,21 @@
 // 2025-11-25). The tools must be the read operations, a tool call must answer what the REST route
 // answers, and the caller's token must be what decides. It posts the test machine's report first.
 // Usage, from the project's folder (@modelcontextprotocol/client comes from its node_modules), with
-// READ_TOKEN and WRITE_TOKEN set: node test/mcp-test.mjs <origin>
+// FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN set: node test/mcp-test.mjs <origin>
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 const { Client, StreamableHTTPClientTransport } = createRequire(`${process.cwd()}/`)("@modelcontextprotocol/client");
 
 const origin = process.argv[2];
 const endpoint = `${origin}/api/mcp`;
-const { READ_TOKEN: read, WRITE_TOKEN: write } = process.env;
+const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write } = process.env;
 let failed = 0;
 function check(name, ok, detail) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${ok ? "" : `: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`}`);
   if (!ok) failed++;
 }
 if (!read || !write) {
-  check("READ_TOKEN and WRITE_TOKEN are set", false, "on Cloudflare: fnox exec -- ...");
+  check("FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN are set", false, "on Cloudflare: fnox exec -- ...");
   process.exit(1);
 }
 const text = result => result.content.map(block => block.text).join("");
