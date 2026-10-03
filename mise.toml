@@ -49,7 +49,8 @@ run = "charter upstream"
 # ---- the API: run it, build it, test it ----------------------------------------------------------
 
 [tasks.run]
-description = "The API natively on API_PORT: no Cloudflare, an in-memory store"
+description = "The API natively on API_PORT: no Cloudflare, an in-memory store, throwaway tokens"
+env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
 run = "charter exec -env PORT={{env.API_PORT}} go run ."
 
 [tasks.build]
@@ -57,7 +58,8 @@ description = "Build the Worker's Wasm with TinyGo into build/, tuned for Worker
 run = "charter wasm-build"
 
 [tasks.dev]
-description = "The API under workerd on API_PORT (cf dev). First time: mise run migrate:local. After a Go change: mise run build"
+description = "The API under workerd on API_PORT (cf dev), throwaway tokens. First time: mise run migrate:local. After a Go change: mise run build"
+env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
 depends = ["build"]
 run = "charter exec -env PORT={{env.API_PORT}} cf dev"
 
@@ -82,16 +84,19 @@ description = "Go tests: the API, the MCP endpoint, the contract's rules"
 run = "go test ./..."
 
 [tasks."test:native"]
-description = "The real-time live test and the MCP client test against the native build"
+description = "The live test and the MCP client test against the native build, with throwaway tokens"
+env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
 run = 'charter with-server -url http://localhost:{port}/api/hello -env PORT={port} -start "go run ." -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}"'
 
 [tasks."test:workerd"]
 description = "The same against the TinyGo Wasm under workerd (go test can't see TinyGo's gaps)"
+env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
 depends = ["build"]
 run = 'charter with-server -url http://localhost:{port}/api/hello -env PORT={port} -start "cf dev" -run "charter migrate-local -port {port}" -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}"'
 
 [tasks.mcp-test]
-description = "The MCP client test (/api/mcp, official TypeScript client) against a running mise run run or mise run dev; writes test notes"
+description = "The MCP client test (/api/mcp, official TypeScript client) against a running mise run run or mise run dev started with the same throwaway tokens"
+env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
 run = 'node test/mcp-test.mjs http://localhost:{{env.API_PORT}}'
 
 # ---- Cloudflare: deploy it, test and measure what is deployed ------------------------------------
@@ -106,21 +111,16 @@ description = "REMOTE: apply pending migrations/ to the Worker's D1 database"
 run = "charter migrate"
 
 [tasks.live-test]
-description = "REMOTE, writes test notes: SSE + WebSocket, raw and through the generated TypeScript SDK, then MCP"
+description = "REMOTE, posts the test machine's report (0000000000000001): every route raw, through the generated TypeScript SDK, then MCP. The tokens from fnox"
 depends = ["sdk:ready typescript-dist"]
-run = 'node test/live-test.mjs {{env.API_URL}} && node test/sdk-live-test.mjs {{env.API_URL}} && node test/mcp-test.mjs {{env.API_URL}}'
-
-[tasks.soak]
-description = "REMOTE, redeploys the Worker: the real-time matrix, every client x scenario, with the generated SDKs and CLI. --idle <min> for the long-idle case"
-depends = ["sdk:ready"]
-run = 'node test/soak.mjs {{env.API_URL}}'
+run = 'fnox exec -- node test/live-test.mjs {{env.API_URL}} && fnox exec -- node test/sdk-live-test.mjs {{env.API_URL}} && fnox exec -- node test/mcp-test.mjs {{env.API_URL}}'
 
 [tasks.bench]
 description = "REMOTE, read-only: every GET operation of the deployed Worker: wall time, Cloudflare's CPU time, and the CPU of each request. Add -write to include the ones that change data"
 run = "charter bench -each -warm 30s"
 
 [tasks.perf]
-description = "REMOTE, writes test notes: the quick loop for performance work: build, deploy, then bench the new isolate from its first request (8 at once, then each operation). About two minutes"
+description = "REMOTE, posts test reports: the quick loop for performance work: build, deploy, then bench the new isolate from its first request (8 at once, then each operation). About two minutes"
 run = "mise run deploy && charter bench -each -burst 8 -write"
 
 [tasks."perf:try"]
@@ -130,6 +130,10 @@ run = "charter perf"
 [tasks."perf:clean"]
 description = "REMOTE: delete the scratch Workers and databases that perf:try runs left"
 run = "charter perf-clean"
+
+[tasks."tokens:put"]
+description = "REMOTE, once and after a rotation: set the Worker's READ_TOKEN and WRITE_TOKEN secrets from fnox (values are never printed)"
+run = "fnox exec -- node scripts/put-tokens.mjs {{env.API_URL}}"
 
 [tasks."cloudflare:secrets"]
 description = "REMOTE, once per repo: copy CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID from fnox into the repo's GitHub secrets, for the deploy workflow"

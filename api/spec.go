@@ -17,6 +17,9 @@ func init() {
 func config() huma.Config {
 	config := humaworkers.Config(Title, Version)
 	config.Info.Description = Description
+	// A bearer token, required everywhere unless an operation says otherwise (hello).
+	config.Components.SecuritySchemes = map[string]*huma.SecurityScheme{Bearer: {Type: "http", Scheme: "bearer"}}
+	config.Security = []map[string][]string{{Bearer: {}}}
 	return config
 }
 

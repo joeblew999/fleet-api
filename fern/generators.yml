@@ -1,4 +1,4 @@
-# The notes API from the Go contract. openapi.json and asyncapi.json are written by `mise run spec`
+# The fleet device API from the Go contract. openapi.json and asyncapi.json are written by `mise run spec`
 # from api/contract.go (never by hand). What Fern needs (SDK names, x-fern-pagination,
 # x-fern-streaming) is declared there; the WebSocket channel comes from the Go library's asyncapi package.
 api:
@@ -23,7 +23,7 @@ groups:
           module:
             path: github.com/joeblew999/fleet-api/sdk/go
             version: "1.22"
-          packageName: notes
+          packageName: fleet
 
   # The TypeScript SDK as sources (.ts): what a release ships.
   typescript:
@@ -34,7 +34,7 @@ groups:
           location: local-file-system
           path: ../sdk/out/typescript
         config:
-          namespaceExport: Notes
+          namespaceExport: Fleet
           generateWebSocketClients: true
           # Workers (without nodejs_compat) have no `process`: guard the SDK's env lookups.
           guardProcessEnvAccess: true
@@ -48,7 +48,7 @@ groups:
           location: local-file-system
           path: ../sdk/out/typescript-dist
         config:
-          namespaceExport: Notes
+          namespaceExport: Fleet
           generateWebSocketClients: true
           # Workers (without nodejs_compat) have no `process`: guard the SDK's env lookups.
           guardProcessEnvAccess: true
@@ -63,4 +63,4 @@ groups:
           location: local-file-system
           path: ../sdk/out/cli
         config:
-          binaryName: notes
+          binaryName: fleet

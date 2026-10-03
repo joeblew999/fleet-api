@@ -13,7 +13,6 @@ sdk/out/
 sdk/.work/
 target/
 dist/
-test/soak-go/soak-go
 
 # Your own settings: another Worker URL, another port
 mise.local.toml
