@@ -8,13 +8,13 @@ permalink: /
 
 > One place that knows every machine in the fleet, what it is, whether it is healthy, and who is using it — readable from anywhere, written by the machines themselves.
 
-Each machine posts a report about itself; anyone with the read token reads the fleet, from a phone, a script or an agent. A Go API on Cloudflare Workers, made with [charter](https://github.com/joeblew999/charter). Start with [Getting started](getting-started.md).
+Each machine posts a report about itself with its own Cloudflare Access service token; a person logged in with GitHub reads the fleet, from a phone, a script or an agent. A Go API on Cloudflare Workers, made with [charter](https://github.com/joeblew999/charter). Start with [Getting started](getting-started.md).
 
 ## What you get
 
 - **One report per machine** ([The report](guides/report.md)): what it is (host, CPU, memory, disks, power, battery, lid, sleep), the Claude worker on it (`rig`) and who holds it (`claims`). Every section says ok, none or unknown, so a zero is always a measured zero.
 - **Five routes** ([Routes](reference/routes.md)): post a report, list the machines, one machine with its conditions, a machine's history of the last 7 days, forget a machine.
-- **Two tokens** ([Tokens](guides/tokens.md)): machines write, readers read.
+- **Auth at the edge** ([Auth and authz](concepts/auth.md), [Access](guides/access.md)): people log in with GitHub, each machine has its own revocable token and posts only for itself, and each operation's scope is in the contract.
 - **A Go SDK** another repo can `go get` ([The Go SDK](guides/go-sdk.md)), a TypeScript SDK that checks a report against the schema before it posts it ([Post a report](guides/report.md#post-one-from-a-machine)), and the read routes as MCP tools at `/api/mcp`.
 
 Deployed at `https://fleet-api.gedw99.workers.dev`.
@@ -24,11 +24,13 @@ Deployed at `https://fleet-api.gedw99.workers.dev`.
 | | |
 |---|---|
 | **The contract (the source)** | `api/contract.go` (routes), `api/device.go` (the report and its rules) |
-| The server | `api/handlers.go` (tokens, conditions), `api/store.go` and `api/store_js.go` (memory, D1) |
+| Who may call what | `api/auth.go` (schemes, scopes, the rules), `authn/` (verifying Access and OpenID Connect JWTs, under TinyGo) |
+| Access's application and the machines' tokens | `scripts/access.mjs` (`mise run access:setup`, `access:token`) |
+| The server | `api/handlers.go` (conditions), `api/store.go` and `api/store_js.go` (memory, D1) |
 | The D1 schema | `migrations/` |
 | The tests | `api/*_test.go`; `test/` (run natively, under workerd and against Cloudflare) |
 | Fern's settings | `fern/generators.yml` |
-| Where the tokens are | `fnox.toml` names them; the values are in the macOS keychain |
+| Where the secrets are | `fnox.toml` names them; the values are in the macOS keychain |
 | The tasks | `mise.toml`: each is one line |
 
 ## What is generated
@@ -48,7 +50,8 @@ Never edit these: change the source and run the task.
 | Section | Pages |
 |---|---|
 | Start | [Getting started](getting-started.md) |
-| [Guides](guides.md) | [The report](guides/report.md), [Tokens](guides/tokens.md), [The Go SDK](guides/go-sdk.md) |
+| [Guides](guides.md) | [The report](guides/report.md), [Access](guides/access.md), [The Go SDK](guides/go-sdk.md), [Tokens](guides/tokens.md) |
+| [Concepts](concepts.md) | [Auth and authz](concepts/auth.md) |
 | [Reference](reference.md) | [Routes](reference/routes.md) |
 | [How to help](contributing.md) | [Rules](rules.md), [Benchmarks](benchmarks.md), [Writing docs](writing.md) |
 

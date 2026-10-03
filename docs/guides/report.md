@@ -6,7 +6,7 @@ parent: Guides
 
 # The report: what a machine says about itself
 
-A machine posts one JSON object, a `DeviceReport` (schema 1), to `POST /api/devices/{id}/reports` with the write token. The schema, with every field's rule, is in `api/device.go` and `fern/openapi.json`; a valid one is `api/example_report.json`.
+A machine posts one JSON object, a `DeviceReport` (schema 1), to `POST /api/devices/{id}/reports` with its own Access service token ([Access](access.md)). The schema, with every field's rule, is in `api/device.go` and `fern/openapi.json`; a valid one is `api/example_report.json`.
 
 ## The parts
 
@@ -51,8 +51,10 @@ import { FleetClient, serialization } from "./fleet-api-sdk-typescript/index.ts"
 
 const checked = serialization.DeviceReport.parse(report);   // the report as JSON, against the schema
 if (!checked.ok) throw new Error(checked.errors.map(e => `${e.path.join(".")}: ${e.message}`).join("; "));
-const client = new FleetClient({ baseUrl: "https://fleet-api.gedw99.workers.dev", token: process.env.FLEET_API_WRITE_TOKEN });
+// The machine's service token; both headers by hand until fern-api/fern#17775 is fixed.
+const { FLEET_API_ACCESS_CLIENT_ID: id, FLEET_API_ACCESS_CLIENT_SECRET: secret } = process.env;
+const client = new FleetClient({ baseUrl: "https://fleet-api.gedw99.workers.dev", auth: false, headers: { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } });
 await client.devices.report({ id: checked.value.id, body: checked.value });
 ```
 
-`parse` checks the types, the enums and the required fields; the Worker checks the rest (bounds, the rules above) and answers 422. Forget a machine that is gone, or an id no longer used, with the write token: `client.devices.delete({ id })`.
+`parse` checks the types, the enums and the required fields; the Worker checks the rest (bounds, the rules above) and answers 422. A person forgets a machine that is gone, or an id no longer used: `client.devices.delete({ id })` (`devices:forget`; a machine's token may not).
