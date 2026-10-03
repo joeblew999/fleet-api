@@ -5,15 +5,15 @@
 // answers, and the caller's credentials must be what decides. It posts the test machine's report first.
 // Usage, from the project's folder (@modelcontextprotocol/client comes from its node_modules):
 // node test/mcp-test.mjs <origin>, with FLEET_API_ACCESS_CLIENT_ID and FLEET_API_ACCESS_CLIENT_SECRET
-// set (the test machine's Access service token: the deployed Worker), or FLEET_API_READ_TOKEN and
-// FLEET_API_WRITE_TOKEN.
+// set (the test machine's Access service token: the deployed Worker), or READ_TOKEN and
+// WRITE_TOKEN.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 const { Client, StreamableHTTPClientTransport } = createRequire(`${process.cwd()}/`)("@modelcontextprotocol/client");
 
 const origin = process.argv[2];
 const endpoint = `${origin}/api/mcp`;
-const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write, FLEET_API_ACCESS_CLIENT_ID: clientId, FLEET_API_ACCESS_CLIENT_SECRET: clientSecret } = process.env;
+const { READ_TOKEN: read, WRITE_TOKEN: write, FLEET_API_ACCESS_CLIENT_ID: clientId, FLEET_API_ACCESS_CLIENT_SECRET: clientSecret } = process.env;
 const viaAccess = Boolean(clientId && clientSecret);
 let failed = 0;
 function check(name, ok, detail) {
@@ -21,7 +21,7 @@ function check(name, ok, detail) {
   if (!ok) failed++;
 }
 if (!viaAccess && (!read || !write)) {
-  check("FLEET_API_ACCESS_CLIENT_ID and _SECRET, or FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN, are set", false, "on Cloudflare: fnox exec -- ...");
+  check("FLEET_API_ACCESS_CLIENT_ID and _SECRET, or READ_TOKEN and WRITE_TOKEN, are set", false, "on Cloudflare: fnox exec -- ...");
   process.exit(1);
 }
 const text = result => result.content.map(block => block.text).join("");

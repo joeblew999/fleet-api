@@ -5,14 +5,14 @@
 // Usage, from the project's folder: node test/live-test.mjs <origin>, with either
 //   - FLEET_API_ACCESS_CLIENT_ID and FLEET_API_ACCESS_CLIENT_SECRET: the test machine's Access service
 //     token (enrolled for 0000000000000001), for the deployed Worker behind Access; or
-//   - FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN: the bearer tokens (the local checks).
+//   - READ_TOKEN and WRITE_TOKEN: the bearer tokens (the local checks).
 import { readFileSync } from "node:fs";
 
 const origin = process.argv[2];
-const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write, FLEET_API_ACCESS_CLIENT_ID: clientId, FLEET_API_ACCESS_CLIENT_SECRET: clientSecret } = process.env;
+const { READ_TOKEN: read, WRITE_TOKEN: write, FLEET_API_ACCESS_CLIENT_ID: clientId, FLEET_API_ACCESS_CLIENT_SECRET: clientSecret } = process.env;
 const viaAccess = Boolean(clientId && clientSecret);
 if (!viaAccess && (!read || !write)) {
-  console.log("FAIL  set FLEET_API_ACCESS_CLIENT_ID and FLEET_API_ACCESS_CLIENT_SECRET, or FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN (on Cloudflare: fnox exec -- ...)");
+  console.log("FAIL  set FLEET_API_ACCESS_CLIENT_ID and FLEET_API_ACCESS_CLIENT_SECRET, or READ_TOKEN and WRITE_TOKEN (on Cloudflare: fnox exec -- ...)");
   process.exit(1);
 }
 // Who calls: the test machine posts, a reader reads. Behind Access both are the test machine's token.

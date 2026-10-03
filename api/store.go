@@ -21,7 +21,7 @@ type Store interface {
 	// Forget removes a device's row and its reports: how many reports went, and whether it had a row.
 	Forget(ctx context.Context, id string) (int, bool, error)
 	// Machine is the device a machine's Access service token (its Client ID) was enrolled for: the
-	// machines table, written by mise run access:token -- create.
+	// machines table, written by mise run machine:enrol.
 	Machine(ctx context.Context, token string) (device string, enrolled bool, err error)
 }
 
@@ -47,7 +47,7 @@ type MemStore struct {
 	machines map[string]string
 }
 
-// Enrol ties a service token's Client ID to a device, as access:token create does in D1.
+// Enrol ties a service token's Client ID to a device, as mise run machine:enrol does in D1.
 func (m *MemStore) Enrol(token, device string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

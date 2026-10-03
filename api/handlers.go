@@ -10,10 +10,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/joeblew999/charter/go/auth"
 	"github.com/joeblew999/charter/go/humamcp"
 	"github.com/joeblew999/charter/go/humaworkers"
-
-	"github.com/joeblew999/fleet-api/authn"
 )
 
 // Env is what the platform supplies: variables and secrets (bindings on Cloudflare, platform_js.go;
@@ -22,35 +21,23 @@ import (
 type Env struct {
 	Var   func(name string) string
 	Store func() (Store, error)
-	// HTTP fetches the keys of the issuers the API trusts (authn): on Workers, workers-go's fetch.
-	// Nil is http.DefaultClient.
-	HTTP *http.Client
 }
-
-// The two secrets of the bearer tokens (auth.go), kept for one release. Unset, no token matches.
-const (
-	WriteToken = "WRITE_TOKEN" // posts reports, and reads
-	ReadToken  = "READ_TOKEN"  // reads
-)
 
 // Handler serves the contract on env, plus the spec with the request's origin as its server, plus
 // the read operations as MCP tools (/api/mcp: a tool call runs the same operation as the REST
-// route, as the same caller). Every request's credentials are verified first (auth.go): the caller
-// goes in the request's context, and each operation's Security decides.
+// route, as the same caller). Each operation's Security decides who may call it (auth.go, charter's
+// go/auth); the handler finds the caller with auth.CallerOf.
 func Handler(env Env) http.Handler {
 	routes := humaworkers.New(config(), Routes(env))
-	routes.UseMiddleware(env.authorize(routes))
+	routes.UseMiddleware(auth.Middleware(routes, env.Var, Trusted...))
 	mcp := humamcp.Handler(routes)
-	verifier := &authn.Verifier{Client: env.HTTP}
+	discovery := auth.Discovery(env.Var)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var spec func(server string) ([]byte, error)
 		switch r.URL.Path {
-		case "/.well-known/oauth-protected-resource", "/.well-known/openid-configuration":
-			env.wellKnown(w, r)
+		case "/.well-known/openid-configuration":
+			discovery.ServeHTTP(w, r)
 			return
-		}
-		r = env.withCaller(verifier, r)
-		switch r.URL.Path {
 		case "/api/openapi.json":
 			spec = OpenAPI
 		case "/api/asyncapi.json":
@@ -102,6 +89,9 @@ func (in *DevicePostInput) Resolve(huma.Context) []error {
 }
 
 func (env Env) devicePost(ctx context.Context, in *DevicePostInput) (*DevicePostOutput, error) {
+	if err := env.MayPostFor(ctx, in.ID); err != nil {
+		return nil, err
+	}
 	store, err := env.Store()
 	if err != nil {
 		return nil, err

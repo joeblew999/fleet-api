@@ -2,12 +2,12 @@
 // report, a reader gets it back, typed errors included.
 // Usage, from the project's folder (the SDK is the one in its sdk/out): node test/sdk-live-test.mjs <origin>,
 // with FLEET_API_ACCESS_CLIENT_ID and FLEET_API_ACCESS_CLIENT_SECRET set (the test machine's Access
-// service token: the deployed Worker), or FLEET_API_READ_TOKEN and FLEET_API_WRITE_TOKEN.
+// service token: the deployed Worker), or READ_TOKEN and WRITE_TOKEN.
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 const origin = process.argv[2];
 const { FleetClient, Fleet, serialization } = await import(pathToFileURL(`${process.cwd()}/sdk/out/typescript-dist/esm/index.mjs`));
-const { FLEET_API_READ_TOKEN: read, FLEET_API_WRITE_TOKEN: write, FLEET_API_ACCESS_CLIENT_ID: clientId, FLEET_API_ACCESS_CLIENT_SECRET: clientSecret } = process.env;
+const { READ_TOKEN: read, WRITE_TOKEN: write, FLEET_API_ACCESS_CLIENT_ID: clientId, FLEET_API_ACCESS_CLIENT_SECRET: clientSecret } = process.env;
 const viaAccess = Boolean(clientId && clientSecret);
 
 let failed = 0;

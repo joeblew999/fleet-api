@@ -172,8 +172,7 @@ func TestTokens(t *testing.T) {
 			headers = []string{"token", c.token}
 		}
 		status, answer, header := do(t, c.method, srv.URL+c.path, c.body, headers...)
-		if status != c.status || (status == 401 && !strings.HasPrefix(header.Get("WWW-Authenticate"), "Bearer resource_metadata=")) ||
-			(status == 403 && !strings.Contains(header.Get("WWW-Authenticate"), `error="insufficient_scope"`)) {
+		if status != c.status || (status == 401 && !strings.HasPrefix(header.Get("WWW-Authenticate"), "Bearer")) {
 			t.Errorf("%s: HTTP %d %s, want %d", c.name, status, answer, c.status)
 		}
 	}
@@ -388,7 +387,7 @@ func TestTheWorkerServesTheSpecWithItsOriginAsServer(t *testing.T) {
 		t.Errorf("openapi servers: %s", openapi)
 	}
 	for _, want := range []string{`"name":"CF-Access-Client-Id"`, `"name":"CF-Access-Client-Secret"`, `"openIdConnectUrl":"/.well-known/openid-configuration"`, `"scheme":"bearer"`,
-		`"security":[{"accessClientId":["devices:write"],"accessClientSecret":[]},{"oidc":["devices:write"]},{"bearer":["devices:write"]}]`} {
+		`"security":[{"bearer":["devices:write"]},{"accessClientId":["devices:write"],"accessClientSecret":[]},{"oidc":["devices:write"]}]`} {
 		if !strings.Contains(openapi, want) {
 			t.Errorf("the spec has no %s", want)
 		}
