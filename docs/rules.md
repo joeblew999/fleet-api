@@ -11,7 +11,7 @@ parent: How to help
 - **The contract is the source.** After changing `api/contract.go` or `api/device.go`, run `mise run spec`, then `mise run sdk:publish`. `mise run check` fails if a committed spec or `sdk/go/` is stale. Never edit `fern/openapi.json`, `fern/asyncapi.json` or `sdk/go/` by hand.
 - **Nothing that identifies a person or a network goes into a report:** no serial number, MAC or IP address, or user name; a home directory is `~`. The Worker refuses what it can recognise ([The report](guides/report.md)).
 - **Tokens are never printed or committed.** Their values are in the keychain (fnox), the Worker's secrets and each machine's own file ([Access](guides/access.md), [Tokens](guides/tokens.md)).
-- **Who may call what is in the contract.** Each operation's `Security` names its scope; nothing else checks a credential ([Auth and authz](concepts/auth.md)).
+- **Who may call what is in the contract.** Each operation's `Security` names its scope, and charter's `go/auth` enforces it; the one rule beside it is that a machine posts only for its own device (`MayPostFor`, [Auth and authz](concepts/auth.md)).
 - **Everything that ships to Workers builds with TinyGo** (`mise run build`). `go test` can't see TinyGo's gaps, so the check also runs the Wasm under workerd.
 - **Test locally and on Cloudflare.** After a deploy, `mise run live-test` must pass against the deployed Worker: some bugs exist only in production.
 - **Only verified results go into the docs:** what ran, where, when. Numbers only in [Benchmarks](benchmarks.md).

@@ -24,14 +24,15 @@ Deployed at `https://fleet-api.gedw99.workers.dev`.
 | | |
 |---|---|
 | **The contract (the source)** | `api/contract.go` (routes), `api/device.go` (the report and its rules) |
-| Who may call what | `api/auth.go` (schemes, scopes, the rules), `authn/` (verifying Access and OpenID Connect JWTs, under TinyGo) |
-| Access's application and the machines' tokens | `scripts/access.mjs` (`mise run access:setup`, `access:token`) |
+| Who may call what | `api/auth.go` (the scopes, who gets them, the per-device rule) on charter's `go/auth` (schemes, verifying Access and OpenID Connect JWTs, under TinyGo) |
+| Access's application and the machines' tokens | charter's `access:setup`, `access:token`; which device a token posts for: `scripts/machines.mjs` (`mise run machine:enrol`) |
 | The server | `api/handlers.go` (conditions), `api/store.go` and `api/store_js.go` (memory, D1) |
 | The D1 schema | `migrations/` |
 | The tests | `api/*_test.go`; `test/` (run natively, under workerd and against Cloudflare) |
 | Fern's settings | `fern/generators.yml` |
 | Where the secrets are | `fnox.toml` names them; the values are in the macOS keychain |
-| The tasks | `mise.toml`: each is one line |
+| The tasks | `mise.toml`: fleet-api's own, each one line; the rest are charter's shared tasks, included by tag (`[task_config] includes`) |
+| The repo on GitHub | `charter.toml` (`mise run repo`): description, topics, labels, issue forms, workflows, Pages |
 
 ## What is generated
 
@@ -42,7 +43,7 @@ Never edit these: change the source and run the task.
 | `fern/openapi.json`, `fern/asyncapi.json` | `mise run spec`, from the contract |
 | `sdk/go/` (committed), `sdk/out/` | `mise run sdk:publish`, `mise run sdk:gen` |
 | `build/` | `mise run build` |
-| `.github/` | `mise run workflows` |
+| `.github/`, `renovate.json` | `mise run repo` (`mise run workflows` for the workflows alone) |
 | `docs/_config.yml`, `docs/writing.md`, `docs/llms.txt`, `docs/_sass/` | `mise run docs:setup` |
 
 ## Every page

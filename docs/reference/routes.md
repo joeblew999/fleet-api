@@ -16,8 +16,7 @@ Every route sits behind Cloudflare Access; the scope column is what the Worker t
 | `listDeviceReports` | `GET /api/devices/{id}/reports?since=&limit=` | `devices:read` | `DeviceHistory`: `id`, `reports[]` (`report`, `received`), newest first; `since` in ms of receipt, `limit` 1 to 500 (50) |
 | `deleteDevice` (not a tool) | `DELETE /api/devices/{id}` | `devices:forget` | `DeviceDeleted`: `id`, `reports` (how many went with it); 404 if it never reported. A machine that reports again comes back |
 | `hello` | `GET /api/hello` | none | `message` |
-| | `GET /.well-known/oauth-protected-resource` | none | RFC 9728: the OpenID Connect provider and the scopes; 404 when none is configured |
-| | `GET /.well-known/openid-configuration` | none | A redirect to the provider's; 404 when none is configured |
+| | `GET /.well-known/openid-configuration` | none | A redirect to the OpenID Connect issuer's; 404 when none is configured |
 | | `GET /api/openapi.json` | none | The spec, with the request's origin as its server |
 | | `POST /api/mcp` | each tool its operation's | The read operations and `hello` as MCP tools, run as the caller |
 

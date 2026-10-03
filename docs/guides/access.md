@@ -8,34 +8,36 @@ parent: Guides
 
 Cloudflare Access stands in front of `https://fleet-api.gedw99.workers.dev`: people log in with GitHub, machines show their own service token. Why and how it fits: [Auth and authz](../concepts/auth.md).
 
-Every task here runs under `fnox exec` and prints no secret. fnox needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_GITHUB_IDP_ID` and `FLEET_API_ACCESS_EMAILS` (who may log in, comma-separated).
+The Access tasks are charter's (`charter access`, the shared tasks `access:setup`, `access:token`, `access:delete`); which device a machine's token posts for is fleet-api's own (`machine:enrol`, `machine:list`, `machine:forget`, `scripts/machines.mjs`). Every one prints no secret. They need `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_GITHUB_IDP_ID` in fnox.
 
 ## Protect the Worker
 
 ```sh
-mise run migrate          # the machines table
-mise run access:setup     # the Access application, its policies, the Worker's ACCESS_TEAM_DOMAIN and ACCESS_AUD
-mise run deploy
+mise run deploy                               # the Worker, and the machines table
+mise run access:setup -- <email>...           # the Access application, its policies, the Worker's ACCESS_TEAM_DOMAIN and ACCESS_AUD
 ```
 
-`access:setup` is idempotent; run it again after changing `FLEET_API_ACCESS_EMAILS`. It writes the application's id and AUD tag to fnox (`FLEET_API_ACCESS_APP_ID`, `FLEET_API_ACCESS_AUD`) and turns on Access's OAuth for MCP clients.
+`access:setup` is idempotent; run it again with the new list after changing who may log in (without emails it keeps the ones the application has). It puts `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` and `ACCESS_APP_ID` in fnox, and every later `mise run deploy` sets the first two on the Worker again (`WORKER_OPTIONAL_SECRETS` in `mise.toml`).
 
 | Policy | Decision | Lets in |
 |---|---|---|
-| `fleet-api machines` | Service Auth | each machine's service token, by id |
-| `fleet-api developers` | Allow | the addresses in `FLEET_API_ACCESS_EMAILS`, logged in with GitHub |
+| `fleet-api machines` | Service Auth | each service token named `fleet-api:<machine>`, by id |
+| `fleet-api people` | Allow | the addresses given to `access:setup`, logged in with GitHub |
 
 Without credentials a browser is sent to the GitHub login (302), a program gets 302 or 401: the Worker never sees the request.
+
+Access's OAuth for MCP clients (the application's `oauth_configuration`, with dynamic client registration for `https://claude.ai/api/mcp/auth_callback`) is not something charter's `access` keeps: `access:setup`, `access:token -- create` and `-- revoke` write the application without it. Until charter keeps it, turn it on again in the Zero Trust dashboard after any of them, or MCP clients can no longer log in.
 
 ## Give a machine its token
 
 ```sh
-mise run access:token -- create <machine> <device id> <file>
+mise run access:token -- create <machine> <file>
+mise run machine:enrol -- <machine> <device id>
 ```
 
-- `<machine>`: a name, lower-case letters, digits and dashes; the token is `fleet-api-<machine>`.
-- `<device id>`: the 16 hex digits the machine reports as (claude-rig keeps it in `~/.config/claude-rig/device-id`). The token posts for that device only; another id is 403.
+- `<machine>`: a name, lower-case letters, digits and dashes; the token is `fleet-api:<machine>`, charter's name for it, which is what puts it in the `fleet-api machines` policy.
 - `<file>`: where its Client ID and Secret go, readable by its owner alone (`{"client_id": ..., "client_secret": ...}`). Cloudflare shows the secret once. `fnox` instead of a file stores them as `FLEET_API_ACCESS_CLIENT_ID` and `FLEET_API_ACCESS_CLIENT_SECRET`: the live test's machine, `live-test`, for `0000000000000001`.
+- `<device id>`: the 16 hex digits the machine reports as (claude-rig keeps it in `~/.config/claude-rig/device-id`). The Worker knows the token by its Client ID (the `machines` table); it posts for that device only, another id is 403, and a token that was never enrolled reads but may not post.
 
 A token lasts a year (`8760h`). The machine sends both headers on every request:
 
@@ -46,11 +48,12 @@ curl -H "CF-Access-Client-Id: $ID" -H "CF-Access-Client-Secret: $SECRET" https:/
 ## List and revoke
 
 ```sh
-mise run access:token -- list                 # name, device, expiry; no secret
+mise run machine:list                         # each token, the device it posts for, its expiry; no secret
 mise run access:token -- revoke <machine>     # Access refuses it from then on
+mise run machine:forget -- <machine>          # and the Worker no longer ties it to a device
 ```
 
-Revoking deletes the token, its row in the `machines` table and its place in the policy. The other machines are untouched.
+Revoking deletes the token and its place in the policy. The other machines are untouched.
 
 ## From the SDKs
 
