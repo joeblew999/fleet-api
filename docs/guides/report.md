@@ -23,11 +23,12 @@ A machine posts one JSON object, a `DeviceReport` (schema 1), to `POST /api/devi
 | `lid` | `closed` | ok, none, unknown |
 | `sleep` | `idle_s`, `inhibited`; optional `display_s`, `lid_action`, `inhibitors[]` | ok, none, unknown |
 | `keeper` | `running`, `idle`, `lid` | ok, none, unknown |
-| `rig`, optional | `tools_installed`, `config_applied`, `logged_in`, `session_running`; optional `commit`, `claude_version`, `work_dir` | ok, none, unknown |
+| `rig`, optional | `tools_installed`, `config_applied`, `logged_in`, `session_running`; optional `commit`, `claude_version`, `work_dir`, `login` | ok, none, unknown |
+| `rig.login`, optional | `logged_in`; optional `auth_method`, `refresh_expires` or `refresh_expires_why` | ok, unknown |
 | `claims`, optional | `slots`; optional `held[]`: `id`, `caller`, `job`, `since`, optional `until` | ok, none, unknown |
 | `vms`, optional | `manager_running`; optional `manager`, `list[]`: `name`, `state`, optional `os`, `owner`, `keep_running`, `keeper_starts` | ok, none, unknown |
 
-`rig` is what claude-rig's `doctor --json` reads; `claims` is who holds the machine, as its claims folder says; `vms` is the virtual machines on it, as the VM tool's keeper (`irgo-winvm keeper`) sees them, with the manager closed meaning every one is stopped. A tool that does not know them leaves them out.
+`rig` is what claude-rig's `doctor --json` reads, and `rig.login` what `claude auth status` and the stored login say (never a token, an email address or an organisation); `claims` is who holds the machine, as its claims folder says; `vms` is the virtual machines on it, as the VM tool's keeper (`irgo-winvm keeper`) sees them, with the manager closed meaning every one is stopped. A tool that does not know them leaves them out.
 
 ## The rules
 
@@ -40,3 +41,18 @@ A machine posts one JSON object, a `DeviceReport` (schema 1), to `POST /api/devi
 - **Schema changes:** a new optional field or section keeps `schema` 1; a changed meaning or a removed field makes it 2, and this Worker refuses 2.
 
 A report that breaks a rule is refused with 422 and the field's location (`body.battery.percent`). The same `id` and `ts` again is a duplicate and changes nothing, so a machine can resend what it could not deliver.
+
+## Post one from a machine
+
+One program posts for a machine, so a machine has one `id`: claude-rig, which reads the machine and takes the `vms` section from the VM tool. It posts through the TypeScript SDK a release attaches (`fleet-api-sdk-typescript.tar.gz`, sources), run with [bun](https://bun.sh); nothing is written by hand against the routes:
+
+```ts
+import { FleetClient, serialization } from "./fleet-api-sdk-typescript/index.ts";
+
+const checked = serialization.DeviceReport.parse(report);   // the report as JSON, against the schema
+if (!checked.ok) throw new Error(checked.errors.map(e => `${e.path.join(".")}: ${e.message}`).join("; "));
+const client = new FleetClient({ baseUrl: "https://fleet-api.gedw99.workers.dev", token: process.env.FLEET_API_WRITE_TOKEN });
+await client.devices.report({ id: checked.value.id, body: checked.value });
+```
+
+`parse` checks the types, the enums and the required fields; the Worker checks the rest (bounds, the rules above) and answers 422. Forget a machine that is gone, or an id no longer used, with the write token: `client.devices.delete({ id })`.

@@ -34,6 +34,9 @@ groups:
           location: local-file-system
           path: ../sdk/out/typescript
         config:
+          # The serde layer: serialization.DeviceReport.parse() checks a report as JSON against the
+          # schema (types, enums, required fields) before it is posted, and the client checks again.
+          noSerdeLayer: false
           namespaceExport: Fleet
           generateWebSocketClients: true
           # Workers (without nodejs_compat) have no `process`: guard the SDK's env lookups.
@@ -48,6 +51,8 @@ groups:
           location: local-file-system
           path: ../sdk/out/typescript-dist
         config:
+          # The same SDK as the sources: with the serde layer.
+          noSerdeLayer: false
           namespaceExport: Fleet
           generateWebSocketClients: true
           # Workers (without nodejs_compat) have no `process`: guard the SDK's env lookups.

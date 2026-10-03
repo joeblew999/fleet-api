@@ -161,6 +161,18 @@ func do() {
                 LoggedIn: fleet.Bool(
                     true,
                 ),
+                Login: &fleet.DeviceRigLogin{
+                    AuthMethod: fleet.String(
+                        "claude.ai",
+                    ),
+                    LoggedIn: fleet.Bool(
+                        true,
+                    ),
+                    RefreshExpires: fleet.Int64(
+                        int64(1798618406000),
+                    ),
+                    Status: fleet.DeviceRigLoginStatusOk,
+                },
                 SessionRunning: fleet.Bool(
                     true,
                 ),

@@ -163,6 +163,9 @@ func TestTokens(t *testing.T) {
 		{"list with the write token", "GET", "/api/devices", "", testWrite, 200},
 		{"history with no token", "GET", "/api/devices/" + exampleID + "/reports", "", "", 401},
 		{"one device with a wrong token", "GET", "/api/devices/" + exampleID, "", "nope", 401},
+		{"delete with no token", "DELETE", "/api/devices/" + exampleID, "", "", 401},
+		{"delete with the read token", "DELETE", "/api/devices/" + exampleID, "", testRead, 401},
+		{"delete with the write token", "DELETE", "/api/devices/" + exampleID, "", testWrite, 200},
 	} {
 		headers := []string{}
 		if c.token != "" {
@@ -192,19 +195,26 @@ func TestBadReportsAre422WithTheLocation(t *testing.T) {
 		change   func(m map[string]any)
 		location string
 	}{
-		"percent 101 (a tag)":                 {func(m map[string]any) { section(m, "battery")["percent"] = 101 }, "body.battery.percent"},
-		"reason not in the enum (a tag)":      {func(m map[string]any) { m["reason"] = "whenever" }, "body.reason"},
-		"upper-case id (a tag)":               {func(m map[string]any) { m["id"] = "3F9A1C0B7D2E4A65" }, "body.id"},
-		"no host (a tag)":                     {func(m map[string]any) { delete(m, "host") }, "body"},
-		"ok with no percent (Validate)":       {func(m map[string]any) { delete(section(m, "battery"), "percent") }, "body.battery.percent"},
-		"unknown with no reason (Validate)":   {func(m map[string]any) { m["lid"] = map[string]any{"status": "unknown"} }, "body.lid.why"},
-		"schema 2 (Validate)":                 {func(m map[string]any) { m["schema"] = 2 }, "body.schema"},
-		"interval promising nothing":          {func(m map[string]any) { m["next_s"] = 0 }, "body.next_s"},
-		"another device's id (Resolve)":       {func(m map[string]any) { m["id"] = "00aa11bb22cc33dd" }, "body.id"},
-		"a home directory in rig.work_dir":    {func(m map[string]any) { section(m, "rig")["work_dir"] = "/Users/someone/claude-work" }, "body.rig.work_dir"},
-		"rig ok without logged_in":            {func(m map[string]any) { delete(section(m, "rig"), "logged_in") }, "body.rig.logged_in"},
-		"rig unknown with values":             {func(m map[string]any) { m["rig"] = map[string]any{"status": "unknown", "why": "x", "logged_in": true} }, "body.rig.logged_in"},
-		"rig status not in the enum":          {func(m map[string]any) { section(m, "rig")["status"] = "fine" }, "body.rig.status"},
+		"percent 101 (a tag)":               {func(m map[string]any) { section(m, "battery")["percent"] = 101 }, "body.battery.percent"},
+		"reason not in the enum (a tag)":    {func(m map[string]any) { m["reason"] = "whenever" }, "body.reason"},
+		"upper-case id (a tag)":             {func(m map[string]any) { m["id"] = "3F9A1C0B7D2E4A65" }, "body.id"},
+		"no host (a tag)":                   {func(m map[string]any) { delete(m, "host") }, "body"},
+		"ok with no percent (Validate)":     {func(m map[string]any) { delete(section(m, "battery"), "percent") }, "body.battery.percent"},
+		"unknown with no reason (Validate)": {func(m map[string]any) { m["lid"] = map[string]any{"status": "unknown"} }, "body.lid.why"},
+		"schema 2 (Validate)":               {func(m map[string]any) { m["schema"] = 2 }, "body.schema"},
+		"interval promising nothing":        {func(m map[string]any) { m["next_s"] = 0 }, "body.next_s"},
+		"another device's id (Resolve)":     {func(m map[string]any) { m["id"] = "00aa11bb22cc33dd" }, "body.id"},
+		"a home directory in rig.work_dir":  {func(m map[string]any) { section(m, "rig")["work_dir"] = "/Users/someone/claude-work" }, "body.rig.work_dir"},
+		"rig ok without logged_in":          {func(m map[string]any) { delete(section(m, "rig"), "logged_in") }, "body.rig.logged_in"},
+		"rig unknown with values":           {func(m map[string]any) { m["rig"] = map[string]any{"status": "unknown", "why": "x", "logged_in": true} }, "body.rig.logged_in"},
+		"rig status not in the enum":        {func(m map[string]any) { section(m, "rig")["status"] = "fine" }, "body.rig.status"},
+		"login ok without logged_in":        {func(m map[string]any) { delete(login(m), "logged_in") }, "body.rig.login.logged_in"},
+		"login unknown with no reason":      {func(m map[string]any) { section(m, "rig")["login"] = map[string]any{"status": "unknown"} }, "body.rig.login.why"},
+		"login names an account":            {func(m map[string]any) { login(m)["auth_method"] = "someone@example.com" }, "body.rig.login.auth_method"},
+		"login expiry known and not known":  {func(m map[string]any) { login(m)["refresh_expires_why"] = "x" }, "body.rig.login.refresh_expires_why"},
+		"login though rig is unknown": {func(m map[string]any) {
+			m["rig"] = map[string]any{"status": "unknown", "why": "x", "login": map[string]any{"status": "unknown", "why": "y"}}
+		}, "body.rig.login"},
 		"claims ok without slots":             {func(m map[string]any) { delete(section(m, "claims"), "slots") }, "body.claims.slots"},
 		"a caller with an @":                  {func(m map[string]any) { claim(m)["caller"] = "someone@studio-1" }, "body.claims.held[0].caller"},
 		"a claim that lapses before it began": {func(m map[string]any) { claim(m)["until"] = 1 }, "body.claims.held[0].until"},
@@ -256,6 +266,8 @@ func TestRigClaimsAndVMsAreOptional(t *testing.T) {
 	}
 }
 
+func login(m map[string]any) map[string]any { return section(section(m, "rig"), "login") }
+
 func vm(m map[string]any) map[string]any {
 	return section(m, "vms")["list"].([]any)[0].(map[string]any)
 }
@@ -270,6 +282,39 @@ func held(m map[string]any, n int) {
 		list = append(list, map[string]any{"id": "c" + itoa(i), "caller": "agent", "job": "work", "since": 1})
 	}
 	section(m, "claims")["held"] = list
+}
+
+func TestAMachineCanBeForgotten(t *testing.T) {
+	srv, _ := server(t)
+	other := strings.ReplaceAll(edit(t, nil), exampleID, "00aa11bb22cc33dd")
+	for _, body := range []string{edit(t, nil), edit(t, func(m map[string]any) { m["ts"] = 1 })} {
+		if status, answer := post(t, srv.URL, body); status != 201 {
+			t.Fatalf("post: %d %s", status, answer)
+		}
+	}
+	if status, answer, _ := do(t, "POST", srv.URL+"/api/devices/00aa11bb22cc33dd/reports", other, "token", testWrite); status != 201 {
+		t.Fatalf("post the other: %d %s", status, answer)
+	}
+	status, answer, _ := do(t, "DELETE", srv.URL+"/api/devices/"+exampleID, "", "token", testWrite)
+	if status != 200 || strings.TrimSpace(answer) != `{"id":"`+exampleID+`","reports":2}` {
+		t.Fatalf("delete: %d %s", status, answer)
+	}
+	if status, answer, _ = do(t, "GET", srv.URL+"/api/devices/"+exampleID, "", "token", testRead); status != 404 {
+		t.Fatalf("get after delete: %d %s", status, answer)
+	}
+	if status, answer, _ = do(t, "GET", srv.URL+"/api/devices/"+exampleID+"/reports", "", "token", testRead); status != 404 {
+		t.Fatalf("history after delete: %d %s", status, answer)
+	}
+	if _, answer, _ = do(t, "GET", srv.URL+"/api/devices", "", "token", testRead); strings.Contains(answer, exampleID) || !strings.Contains(answer, "00aa11bb22cc33dd") {
+		t.Fatalf("list after delete: %s", answer)
+	}
+	if status, answer, _ = do(t, "DELETE", srv.URL+"/api/devices/"+exampleID, "", "token", testWrite); status != 404 {
+		t.Fatalf("delete again: %d %s", status, answer)
+	}
+	// A machine that reports again comes back.
+	if status, answer := post(t, srv.URL, edit(t, nil)); status != 201 || !strings.Contains(answer, `"duplicate":false`) {
+		t.Fatalf("post after delete: %d %s", status, answer)
+	}
 }
 
 func TestConditions(t *testing.T) {

@@ -10,7 +10,7 @@ Every route but `/api/hello` and the specs needs `Authorization: Bearer <token>`
 
 | Token | Worker secret | fnox name, keychain item and variable the scripts read | Can |
 |---|---|---|---|
-| write | `WRITE_TOKEN` | `FLEET_API_WRITE_TOKEN` | post reports, and read |
+| write | `WRITE_TOKEN` | `FLEET_API_WRITE_TOKEN` | post reports, forget a machine, and read |
 | read | `READ_TOKEN` | `FLEET_API_READ_TOKEN` | read |
 
 The values live in the macOS keychain of the owner's Mac and in the Worker's secrets, nowhere else: `fnox.toml` only names them, and no task prints them. An unset secret matches no token. Outside the Worker a token has one name, prefixed with the repo's, the rule for every repo of the owner's ([claude-rig's Secrets page](https://github.com/joeblew999/claude-rig/blob/main/docs/concepts/secrets.md)); `scripts/put-tokens.mjs` stores each as the Worker's shorter name.

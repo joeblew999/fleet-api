@@ -134,6 +134,59 @@ func (r *RawClient) Get(
 	}, nil
 }
 
+func (r *RawClient) Delete(
+	ctx context.Context,
+	request *fleet.DeleteDevicesRequest,
+	opts ...option.RequestOption,
+) (*core.Response[*fleet.DeviceDeleted], error) {
+	options := core.NewRequestOptions(opts...)
+	baseURL := internal.ResolveBaseURL(
+		options.BaseURL,
+		internal.ResolveEnvironmentBaseURL(
+			options.Environment,
+			"Base",
+		),
+		r.baseURL,
+		internal.ResolveEnvironmentBaseURL(
+			r.options.Environment,
+			"Base",
+		),
+		"https://fleet-api.gedw99.workers.dev",
+	)
+	endpointURL := internal.EncodeURL(
+		baseURL+"/api/devices/%v",
+		request.ID,
+	)
+	headers := internal.MergeHeaders(
+		r.options.ToHeader(),
+		options.ToHeader(),
+	)
+	var response *fleet.DeviceDeleted
+	raw, err := r.caller.Call(
+		ctx,
+		&internal.CallParams{
+			URL:             endpointURL,
+			Method:          http.MethodDelete,
+			Headers:         headers,
+			MaxAttempts:     options.MaxAttempts,
+			DisableRetries:  options.DisableRetries,
+			BodyProperties:  options.BodyProperties,
+			QueryParameters: options.QueryParameters,
+			Client:          options.HTTPClient,
+			Response:        &response,
+			ErrorDecoder:    internal.NewErrorDecoder(fleet.ErrorCodes),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &core.Response[*fleet.DeviceDeleted]{
+		StatusCode: raw.StatusCode,
+		Header:     raw.Header,
+		Body:       response,
+	}, nil
+}
+
 func (r *RawClient) History(
 	ctx context.Context,
 	request *fleet.HistoryDevicesRequest,

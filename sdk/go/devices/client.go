@@ -78,6 +78,33 @@ func (c *Client) Get(
 	return response.Body, nil
 }
 
+// For a machine that is gone, or an id no longer used. A machine that reports again comes back.
+//
+// Example:
+//
+//	request := &fleet.DeleteDevicesRequest{
+//	    ID: "3f9a1c0b7d2e4a65",
+//	}
+//	client.Devices.Delete(
+//	    context.TODO(),
+//	    request,
+//	)
+func (c *Client) Delete(
+	ctx context.Context,
+	request *fleet.DeleteDevicesRequest,
+	opts ...option.RequestOption,
+) (*fleet.DeviceDeleted, error) {
+	response, err := c.WithRawResponse.Delete(
+		ctx,
+		request,
+		opts...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return response.Body, nil
+}
+
 // Example:
 //
 //	request := &fleet.HistoryDevicesRequest{
@@ -229,6 +256,18 @@ func (c *Client) History(
 //	            LoggedIn: fleet.Bool(
 //	                true,
 //	            ),
+//	            Login: &fleet.DeviceRigLogin{
+//	                AuthMethod: fleet.String(
+//	                    "claude.ai",
+//	                ),
+//	                LoggedIn: fleet.Bool(
+//	                    true,
+//	                ),
+//	                RefreshExpires: fleet.Int64(
+//	                    int64(1798618406000),
+//	                ),
+//	                Status: fleet.DeviceRigLoginStatusOk,
+//	            },
 //	            SessionRunning: fleet.Bool(
 //	                true,
 //	            ),

@@ -184,15 +184,29 @@ type DeviceKeeper struct {
 type DeviceRig struct {
 	_ struct{} `json:"-" additionalProperties:"true"`
 
-	Status         string `json:"status" enum:"ok,none,unknown" doc:"none: claude-rig never set this machine up."`
-	Why            string `json:"why,omitempty" maxLength:"200"`
-	Commit         string `json:"commit,omitempty" maxLength:"64" doc:"The claude-rig commit it last ran; absent when not known."`
-	ToolsInstalled *bool  `json:"tools_installed,omitempty" doc:"Every tool the rig installs is there."`
-	ClaudeVersion  string `json:"claude_version,omitempty" maxLength:"200" doc:"What claude --version prints; absent when Claude is not installed."`
-	ConfigApplied  *bool  `json:"config_applied,omitempty" doc:"The rig's Claude configuration is applied."`
-	LoggedIn       *bool  `json:"logged_in,omitempty" doc:"Claude is logged in."`
-	SessionRunning *bool  `json:"session_running,omitempty" doc:"A Claude session is running for the rig."`
-	WorkDir        string `json:"work_dir,omitempty" maxLength:"200" doc:"Where its jobs run, the home directory written as ~."`
+	Status         string          `json:"status" enum:"ok,none,unknown" doc:"none: claude-rig never set this machine up."`
+	Why            string          `json:"why,omitempty" maxLength:"200"`
+	Commit         string          `json:"commit,omitempty" maxLength:"64" doc:"The claude-rig commit it last ran; absent when not known."`
+	ToolsInstalled *bool           `json:"tools_installed,omitempty" doc:"Every tool the rig installs is there."`
+	ClaudeVersion  string          `json:"claude_version,omitempty" maxLength:"200" doc:"What claude --version prints; absent when Claude is not installed."`
+	ConfigApplied  *bool           `json:"config_applied,omitempty" doc:"The rig's Claude configuration is applied."`
+	LoggedIn       *bool           `json:"logged_in,omitempty" doc:"Claude is logged in."`
+	SessionRunning *bool           `json:"session_running,omitempty" doc:"A Claude session is running for the rig."`
+	WorkDir        string          `json:"work_dir,omitempty" maxLength:"200" doc:"Where its jobs run, the home directory written as ~."`
+	Login          *DeviceRigLogin `json:"login,omitempty" doc:"Claude's login as claude auth status and the stored login say; absent when not read."`
+}
+
+// DeviceRigLogin is Claude's login on the machine: whether it is logged in, how, and when the stored
+// login runs out. Never a token, an email address or an organisation.
+type DeviceRigLogin struct {
+	_ struct{} `json:"-" additionalProperties:"true"`
+
+	Status            string `json:"status" enum:"ok,unknown" doc:"ok: claude auth status answered."`
+	Why               string `json:"why,omitempty" maxLength:"200"`
+	LoggedIn          *bool  `json:"logged_in,omitempty" doc:"What claude auth status says."`
+	AuthMethod        string `json:"auth_method,omitempty" maxLength:"200" doc:"How it is logged in, as claude auth status names it: claude.ai."`
+	RefreshExpires    int64  `json:"refresh_expires,omitempty" minimum:"0" doc:"When the stored login's refresh token expires, Unix milliseconds; absent when not known."`
+	RefreshExpiresWhy string `json:"refresh_expires_why,omitempty" maxLength:"200" doc:"Why refresh_expires is absent."`
 }
 
 // DeviceClaims is who holds the machine: the claims taken on it, which are the authority, as the
@@ -290,6 +304,12 @@ type DevicePosted struct {
 	Received   int64             `json:"received"`
 	Duplicate  bool              `json:"duplicate" doc:"This id and ts were already stored; nothing changed."`
 	Conditions []DeviceCondition `json:"conditions"`
+}
+
+// DeviceDeleted is the answer to forgetting a device.
+type DeviceDeleted struct {
+	ID      string `json:"id"`
+	Reports int32  `json:"reports" doc:"How many of its reports, of the last 7 days, were deleted with it."`
 }
 
 // DeviceHistory is a device's reports, newest first.
@@ -443,7 +463,19 @@ func (r *DeviceReport) Validate() []FieldError {
 		only(ok, "rig.commit", g.Commit != "")
 		only(ok, "rig.claude_version", g.ClaudeVersion != "")
 		only(ok, "rig.work_dir", g.WorkDir != "")
+		only(ok, "rig.login", g.Login != nil)
 		notHome("rig.work_dir", g.WorkDir)
+		if l := g.Login; l != nil {
+			ok := section("rig.login", l.Status, l.Why)
+			need(ok, "rig.login.logged_in", l.LoggedIn != nil)
+			only(ok, "rig.login.auth_method", l.AuthMethod != "")
+			if strings.Contains(l.AuthMethod, "@") {
+				bad("rig.login.auth_method", "has an @: name the method, not the account")
+			}
+			if l.RefreshExpires != 0 && l.RefreshExpiresWhy != "" {
+				bad("rig.login.refresh_expires_why", "given though refresh_expires is known")
+			}
+		}
 	}
 
 	if c := r.Claims; c != nil {
