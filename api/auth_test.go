@@ -1,15 +1,14 @@
 package api
 
 import (
-	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/joeblew999/charter/go/auth/authtest"
 	"github.com/joeblew999/charter/go/humaworkers"
-
-	"github.com/joeblew999/fleet-api/authn/authntest"
 )
 
 const (
@@ -19,18 +18,18 @@ const (
 	ciToken      = "ci.access"      // one that was not enrolled
 )
 
-// A server that trusts a test issuer as both Cloudflare Access and an OpenID Connect provider, and
+// A server that trusts a test issuer as both Cloudflare Access and an OpenID Connect issuer, and
 // still takes the bearer tokens.
-func trusting(t *testing.T) (*httptest.Server, *authntest.Issuer) {
+func trusting(t *testing.T) (*httptest.Server, *authtest.Issuer) {
 	t.Helper()
-	issuer := authntest.New()
+	issuer := authtest.New()
 	t.Cleanup(issuer.Close)
 	memory := &MemStore{}
 	memory.Enrol(machineToken, exampleID)
 	settings := map[string]string{
 		"APP_NAME": "test", ReadToken: testRead, WriteToken: testWrite,
 		"ACCESS_TEAM_DOMAIN": issuer.URL, "ACCESS_AUD": testAUD,
-		"OIDC_ISSUER": issuer.URL, "OIDC_JWKS": issuer.URL + "/jwks", "OIDC_AUDIENCE": testAudience,
+		"OIDC_ISSUER": issuer.URL, "OIDC_AUDIENCE": testAudience,
 	}
 	srv := httptest.NewServer(Handler(Env{Var: func(name string) string { return settings[name] }, Store: func() (Store, error) { return memory, nil }}))
 	t.Cleanup(srv.Close)
@@ -60,7 +59,7 @@ func TestWhoMayDoWhat(t *testing.T) {
 		{"a machine may not forget itself", "DELETE", "/api/devices/" + exampleID, "", machine, 403, "devices:forget"},
 		{"a person through Access forgets a machine", "DELETE", "/api/devices/" + exampleID, "", person, 200, ""},
 		{"a service token not enrolled reads", "GET", "/api/devices", "", ci, 200, ""},
-		{"a service token not enrolled may not post", "POST", "/api/devices/" + exampleID + "/reports", report(exampleID), ci, 403, "devices:write"},
+		{"a service token not enrolled may not post", "POST", "/api/devices/" + exampleID + "/reports", report(exampleID), ci, 403, "was not enrolled"},
 		{"an Access JWT for another application", "GET", "/api/devices", "", access(issuer.Access("another-app", "dev@example.com", "")), 401, "refused"},
 		{"a forged Access JWT", "GET", "/api/devices", "", access(issuer.Access(testAUD, "dev@example.com", "")[:40] + "x.y.z"), 401, "refused"},
 		{"an OIDC token with devices:read reads", "GET", "/api/devices", "", bearerOf(issuer.OIDC(testAudience, "user-1", "openid devices:read")), 200, ""},
@@ -84,21 +83,21 @@ func TestWhoMayDoWhat(t *testing.T) {
 	}
 }
 
+// The spec's openIdConnectUrl sends a client on to the issuer; with none configured there is nothing to discover.
 func TestDiscovery(t *testing.T) {
 	srv, issuer := trusting(t)
-	status, body, _ := do(t, "GET", srv.URL+"/.well-known/oauth-protected-resource", "")
-	var doc struct {
-		Resource string   `json:"resource"`
-		Servers  []string `json:"authorization_servers"`
-		Scopes   []string `json:"scopes_supported"`
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.Get(srv.URL + "/.well-known/openid-configuration")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if status != 200 || json.Unmarshal([]byte(body), &doc) != nil || doc.Resource != srv.URL || len(doc.Servers) != 1 || doc.Servers[0] != issuer.URL || len(doc.Scopes) != len(Scopes) {
-		t.Errorf("protected resource metadata: HTTP %d %s", status, body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusFound || res.Header.Get("Location") != issuer.URL+"/.well-known/openid-configuration" {
+		t.Errorf("discovery: HTTP %d to %q", res.StatusCode, res.Header.Get("Location"))
 	}
-	// With no provider configured there is nothing to discover.
 	plain, _ := server(t)
-	if status, _, _ := do(t, "GET", plain.URL+"/.well-known/oauth-protected-resource", ""); status != 404 {
-		t.Errorf("no provider: HTTP %d, want 404", status)
+	if status, _, _ := do(t, "GET", plain.URL+"/.well-known/openid-configuration", ""); status != 404 {
+		t.Errorf("no issuer: HTTP %d, want 404", status)
 	}
 }
 
@@ -120,7 +119,7 @@ func TestFernAuthMatchesTheContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, scheme := range securitySchemes() {
+	for name, scheme := range config().Components.SecuritySchemes {
 		want := []string{"    " + name + ":\n"}
 		if scheme.Type == "apiKey" {
 			fern := scheme.Extensions["x-fern-header"].(map[string]any)

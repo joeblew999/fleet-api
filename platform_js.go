@@ -4,14 +4,12 @@ package main
 
 import (
 	"github.com/syumai/workers-go/cloudflare"
-	"github.com/syumai/workers-go/cloudflare/fetch"
 
 	"github.com/joeblew999/charter/go/d1"
 	"github.com/joeblew999/fleet-api/api"
 )
 
-// env binds the API to the Worker's bindings (cloudflare.config.ts): APP_NAME, DB (D1), the
-// secrets, and fetch for the keys of the issuers it trusts.
+// env binds the API to the Worker's bindings (cloudflare.config.ts): APP_NAME, DB (D1), the secrets.
 func env() api.Env {
 	return api.Env{
 		Var: cloudflare.Getenv,
@@ -22,6 +20,5 @@ func env() api.Env {
 			}
 			return api.D1Store{DB: db}, nil
 		},
-		HTTP: fetch.NewClient().HTTPClient(fetch.RedirectModeFollow),
 	}
 }

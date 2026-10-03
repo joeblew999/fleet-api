@@ -5,6 +5,8 @@ name: check
 on:
   push:
     branches: [main]
+    # A release is cut from a developer's machine: this checks its tag on every OS afterwards.
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -24,6 +26,15 @@ jobs:
   # which GitHub's Windows runners do not run.)
   check-windows:
     runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: jdx/mise-action@v5.0.1
+      - run: mise run setup
+      - run: mise run check
+  # And on macOS.
+  check-macos:
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1

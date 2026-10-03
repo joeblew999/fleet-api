@@ -8,17 +8,29 @@
 # command of the charter tool, which works on the project it is run in (`help` lists its commands).
 
 [tools]
-# The tool every task runs: `mise up` moves to a newer release.
-"go:github.com/joeblew999/charter/cmd/charter" = "0.9.1"
+# The tool every task runs, the release's binary: `mise up --bump github:joeblew999/charter` moves to a newer one.
+"github:joeblew999/charter" = "0.13.0"
 go = "1.27.1"
 node = "26.10.0"
 # Builds the generated CLI: mise run sdk:cli:build.
 rust = "1.98.1"
+# Link the CLI for the other systems a release ships it for: mise run sdk:dist:cli.
+zig = "0.16.0"
+"aqua:rust-cross/cargo-zigbuild" = "0.23.4"
 gh = "2.101.0"
 # The secrets: names in fnox.toml, values in the keychain. Tasks get them through fnox exec.
 fnox = "1.36.0"
 
 [env]
+# How the tasks run the charter tool.
+CHARTER_TOOL = "charter"
+# The Worker's secrets: every mise run deploy sets them, from fnox (fnox.toml) or, in CI, from the
+# repo's GitHub secrets. The local runs and tests use throwaway ones.
+WORKER_SECRETS = "READ_TOKEN WRITE_TOKEN"
+# The Worker's optional secrets: who else it trusts (Cloudflare Access, an OpenID Connect issuer).
+# A deploy sets those the environment has (fnox has Access's); the rest stay unset, and the Worker
+# trusts no one that way.
+WORKER_OPTIONAL_SECRETS = "ACCESS_TEAM_DOMAIN ACCESS_AUD OIDC_ISSUER OIDC_AUDIENCE"
 # The local dev port.
 API_PORT = "{{ get_env(name='API_PORT', default='5174') }}"
 # Where the Worker is deployed (cf deploy prints it; there is no cf command to look it up). Its first
@@ -32,219 +44,65 @@ API_URL = "{{ get_env(name='API_URL', default='https://fleet-api.gedw99.workers.
 FNOX_PROFILE = "fleet-api"
 FNOX_NO_DEFAULTS = "true"
 
+[task_config]
+# The tasks every project shares, and those of its language: charter's tasks/ folder (a project
+# includes it from GitHub, by tag). A task defined below takes the place of the shared one.
+includes = ["git::https://github.com/joeblew999/charter.git//tasks/shared?ref=v0.13.0", "git::https://github.com/joeblew999/charter.git//tasks/go?ref=v0.13.0"]
+
 # ---- the project ---------------------------------------------------------------------------------
 
-[tasks.setup]
-description = "Install the npm packages: cf (Cloudflare's CLI), Fern's CLI, what the tests import"
-run = "npm ci --no-fund --no-audit"
-
 [tasks.check]
-description = "Every LOCAL check (no Cloudflare account): lint, tests, spec drift, the TinyGo build, the live and MCP tests natively and under workerd, and what is generated matches"
+description = "Every LOCAL check (no Cloudflare account): lint, tests, spec drift, the TinyGo build, the live, MCP and auth tests natively and under workerd, and what is generated matches"
 depends = ["lint", "test", "spec:check", "sdk:publish:fresh", "test:native", "test:workerd", "workflows:check", "docs:check"]
-
-[tasks.doctor]
-description = "Check what the tasks need: npm packages, Docker, Go, Rust"
-run = "charter doctor"
-
-[tasks."upstream:status"]
-description = "The upstream issues the code works around (every `Upstream:` tag): CLOSED means that workaround can go"
-run = "charter upstream"
 
 # ---- the API: run it, build it, test it ----------------------------------------------------------
 
-[tasks.run]
-description = "The API natively on API_PORT: no Cloudflare, an in-memory store, throwaway tokens"
-env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
-run = "charter exec -env PORT={{env.API_PORT}} go run ."
-
-[tasks.build]
-description = "Build the Worker's Wasm with TinyGo into build/, tuned for Workers, with the library's Worker glue beside it; fails over 3 MB gzipped"
-run = "charter wasm-build"
-
-[tasks.dev]
-description = "The API under workerd on API_PORT (cf dev), throwaway tokens. First time: mise run migrate:local. After a Go change: mise run build"
-env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
-depends = ["build"]
-run = "charter exec -env PORT={{env.API_PORT}} cf dev"
-
-[tasks."migrate:local"]
-description = "Apply migrations/ to the local D1 of a running mise run dev"
-run = "charter migrate-local"
-
-[tasks.spec]
-description = "Write both specs from the contract (api/contract.go) into fern/"
-run = 'go run ./cmd/spec fern/openapi.json fern/asyncapi.json {{env.API_URL}}'
-
-[tasks."spec:check"]
-description = "Fail if a committed spec is stale against the contract"
-run = 'go run ./cmd/spec -check fern/openapi.json fern/asyncapi.json {{env.API_URL}}'
-
 [tasks.lint]
 description = "gofmt and go vet, for the host and for Wasm"
-run = "charter lint -wasm . *.go api authn cmd test"
-
-[tasks.test]
-description = "Go tests: the API, the MCP endpoint, the contract's rules"
-run = "go test ./..."
+run = "{{env.CHARTER_TOOL}} lint -wasm . *.go api cmd"
 
 [tasks."test:native"]
-description = "The live test, the MCP client test and the auth test (a test issuer this run makes) against the native build, with throwaway tokens"
-env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token", FLEET_API_READ_TOKEN = "local-read-token", FLEET_API_WRITE_TOKEN = "local-write-token" }
-run = 'charter with-server -url http://localhost:{port}/api/hello -env PORT={port} -env ACCESS_TEAM_DOMAIN=http://localhost:{port2} -env ACCESS_AUD=test-aud -env OIDC_ISSUER=http://localhost:{port2} -env OIDC_JWKS=http://localhost:{port2}/jwks -env OIDC_AUDIENCE=https://fleet-api.test -start "go run ." -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}" -run "node test/auth-test.mjs http://localhost:{port} {port2}"'
+description = "The live test, the MCP client test and the auth test (Access and OIDC from a test issuer it serves; a machine enrolled for 0000000000000001) against the native build, with throwaway tokens"
+env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
+run = '{{env.CHARTER_TOOL}} with-server -url http://localhost:{port}/api/hello -env PORT={port} -env ACCESS_TEAM_DOMAIN=http://localhost:{port2} -env ACCESS_AUD=test-aud -env OIDC_ISSUER=http://localhost:{port2} -env OIDC_AUDIENCE=https://fleet-api.test -env MACHINES=machine.access=0000000000000001 -start "go run ." -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}" -run "node test/auth-test.mjs http://localhost:{port} {port2}"'
 
 [tasks."test:workerd"]
 description = "The same against the TinyGo Wasm under workerd (go test can't see TinyGo's gaps, such as its crypto)"
-env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token", FLEET_API_READ_TOKEN = "local-read-token", FLEET_API_WRITE_TOKEN = "local-write-token" }
+env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
 depends = ["build"]
-run = 'charter with-server -url http://localhost:{port}/api/hello -env PORT={port} -env ACCESS_TEAM_DOMAIN=http://localhost:{port2} -env ACCESS_AUD=test-aud -env OIDC_ISSUER=http://localhost:{port2} -env OIDC_JWKS=http://localhost:{port2}/jwks -env OIDC_AUDIENCE=https://fleet-api.test -start "cf dev" -run "charter migrate-local -port {port}" -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}" -run "node test/auth-test.mjs http://localhost:{port} {port2}"'
+run = '{{env.CHARTER_TOOL}} with-server -url http://localhost:{port}/api/hello -env PORT={port} -env ACCESS_TEAM_DOMAIN=http://localhost:{port2} -env ACCESS_AUD=test-aud -env OIDC_ISSUER=http://localhost:{port2} -env OIDC_AUDIENCE=https://fleet-api.test -start "cf dev" -run "{{env.CHARTER_TOOL}} migrate-local -port {port}" -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}" -run "node test/auth-test.mjs http://localhost:{port} {port2}"'
 
 [tasks.mcp-test]
-description = "The MCP client test (/api/mcp, official TypeScript client) against a running mise run run or mise run dev started with the same throwaway tokens"
-env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token", FLEET_API_READ_TOKEN = "local-read-token", FLEET_API_WRITE_TOKEN = "local-write-token" }
+description = "The MCP client test (/api/mcp, official TypeScript client) against a running mise run run or mise run dev"
+env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token" }
 run = 'node test/mcp-test.mjs http://localhost:{{env.API_PORT}}'
 
 # ---- Cloudflare: deploy it, test and measure what is deployed ------------------------------------
 
 [tasks.deploy]
-description = "REMOTE: build and deploy the Worker, then apply pending D1 migrations"
+description = "REMOTE: build and deploy the Worker with its secrets (WORKER_SECRETS, and the WORKER_OPTIONAL_SECRETS fnox has), then apply pending D1 migrations"
 depends = ["build"]
-run = "charter exec cf deploy && charter migrate"
-
-[tasks.migrate]
-description = "REMOTE: apply pending migrations/ to the Worker's D1 database"
-run = "charter migrate"
+run = "{{env.CHARTER_TOOL}} exec -secrets {{env.CHARTER_TOOL}} deploy"
 
 [tasks.live-test]
-description = "REMOTE, posts the test machine's report (0000000000000001): every route raw, through the generated TypeScript SDK, then MCP. The tokens from fnox"
+description = "REMOTE, posts the test machine's report (0000000000000001): every route raw, through the generated TypeScript SDK, then MCP, with the test machine's Access service token from fnox"
 depends = ["sdk:ready typescript-dist"]
-run = 'fnox exec -- node test/live-test.mjs {{env.API_URL}} && fnox exec -- node test/sdk-live-test.mjs {{env.API_URL}} && fnox exec -- node test/mcp-test.mjs {{env.API_URL}}'
+run = '{{env.CHARTER_TOOL}} exec -secrets node test/live-test.mjs {{env.API_URL}} && {{env.CHARTER_TOOL}} exec -secrets node test/sdk-live-test.mjs {{env.API_URL}} && {{env.CHARTER_TOOL}} exec -secrets node test/mcp-test.mjs {{env.API_URL}}'
 
 [tasks.bench]
 description = "REMOTE, read-only: every GET operation of the deployed Worker: wall time, Cloudflare's CPU time, and the CPU of each request. Add -write to include the ones that change data"
-run = "charter bench -each -warm 30s"
+run = "{{env.CHARTER_TOOL}} bench -each -warm 30s"
 
-[tasks.perf]
-description = "REMOTE, posts test reports: the quick loop for performance work: build, deploy, then bench the new isolate from its first request (8 at once, then each operation). About two minutes"
-run = "mise run deploy && charter bench -each -burst 8 -write"
+# ---- the machines: which device each Access service token posts for (fleet-api's own) ------------
 
-[tasks."perf:try"]
-description = "REMOTE: try a change on a scratch Worker of its own and delete it after: mise run perf:try -- -name <experiment> [-build '<wasm-build flags>'] [-keep]. Several can run at once"
-run = "charter perf"
+[tasks."machine:enrol"]
+description = "REMOTE: tie a machine's Access service token (mise run access:token -- create <machine> ...) to its device, the only one it may post for: mise run machine:enrol -- <machine> <device id>"
+run = "fnox exec -- node scripts/machines.mjs {{env.API_URL}} enrol"
 
-[tasks."perf:clean"]
-description = "REMOTE: delete the scratch Workers and databases that perf:try runs left"
-run = "charter perf-clean"
+[tasks."machine:list"]
+description = "REMOTE, read-only: each machine's service token, the device it posts for, and when it expires (no secret)"
+run = "fnox exec -- node scripts/machines.mjs {{env.API_URL}} list"
 
-[tasks."tokens:put"]
-description = "REMOTE, once and after a rotation: set the Worker's READ_TOKEN and WRITE_TOKEN secrets from fnox (values are never printed)"
-run = "fnox exec -- node scripts/put-tokens.mjs {{env.API_URL}}"
-
-[tasks."access:setup"]
-description = "REMOTE, once and after changing who may log in: Cloudflare Access in front of the Worker (GitHub login for FLEET_API_ACCESS_EMAILS, a service token per machine), and the Worker's ACCESS_* secrets. Idempotent"
-run = "fnox exec -- node scripts/access.mjs {{env.API_URL}} setup"
-
-[tasks."access:token"]
-description = "REMOTE: a machine's Access service token: mise run access:token -- create <machine> <device id> <file|fnox>, list, revoke <machine>"
-run = "fnox exec -- node scripts/access.mjs {{env.API_URL}} token"
-
-[tasks."cloudflare:secrets"]
-description = "REMOTE, once per repo: copy CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID from fnox into the repo's GitHub secrets, for the deploy workflow"
-run = "fnox exec -- charter github-secrets CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID"
-
-[tasks."cloudflare:token"]
-description = "Fail unless CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set: what a deploy from GitHub needs (locally, cf auth login is enough)"
-run = "charter need-env CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID"
-
-# ---- sdk: what Fern generates from the specs in fern/ (its settings: fern/generators.yml) ---------
-
-[tasks."sdk:list"]
-description = "The SDK groups fern/generators.yml defines"
-run = "charter sdk-list"
-
-[tasks."sdk:check-spec"]
-description = "Validate the specs and Fern's settings with Fern"
-run = "charter exec fern check --warnings"
-
-[tasks."sdk:gen"]
-description = "Generate an SDK with Fern (Docker): mise run sdk:gen <group> -> sdk/out/<group>"
-run = "charter sdk-gen"
-
-[tasks."sdk:check"]
-description = "Prove a generated SDK works (Go: build, vet, tests against WireMock; TypeScript: typecheck): mise run sdk:check <group>"
-run = "charter sdk-check"
-
-[tasks."sdk:ready"]
-description = "Generate and build what the tests use, if missing (TypeScript and Go SDKs, the CLI): mise run sdk:ready [group...]"
-run = "charter sdk-ready"
-
-[tasks."sdk:publish"]
-description = "Generate and check the Go SDK, then copy its sources into sdk/go, the committed module another repo can go get (Docker). Commit the result"
-run = "charter sdk-publish"
-
-[tasks."sdk:publish:check"]
-description = "Fail if sdk/go is not what the committed specs generate now (Docker)"
-run = "charter sdk-publish -check"
-
-[tasks."sdk:publish:fresh"]
-description = "Fail if the specs changed since sdk/go was made from them (no Docker: it compares a hash). sdk:publish:check proves the content"
-run = "charter sdk-publish -check -quick"
-
-[tasks."sdk:cli:build"]
-description = "HEAVY: build the generated Rust CLI in sdk/out/cli: mise run sdk:cli:build [-linux]"
-run = "charter cli-build"
-
-[tasks."sdk:dist"]
-description = "Generate, check and archive what a release ships into dist/: Go and TypeScript SDK sources, the specs (Docker)"
-run = "charter dist-sdk"
-
-[tasks."sdk:dist:cli"]
-description = "HEAVY: generate and build the CLI into dist/: mise run sdk:dist:cli [-linux]"
-run = "charter dist-cli"
-
-[tasks."sdk:docs"]
-description = "Preview the API's reference site locally (fern docs dev): http://localhost:3030"
-# Fern runs its preview app from ~/.fern, outside the project: tell mise's shims which node to use there.
-env = { MISE_NODE_VERSION = "26.10.0" }
-run = "charter exec fern docs dev --port 3030"
-
-[tasks."sdk:clean"]
-description = "Remove generated SDKs (sdk/out) and stop leftover WireMock containers"
-run = "charter sdk-clean"
-
-# ---- the repo: releases, GitHub workflows, the docs site in docs/ --------------------------------
-
-[tasks.release]
-description = "REMOTE on a version tag (vX.Y.Z): attach dist/* to its GitHub Release. Anywhere else: a dry run that lists dist/"
-run = "charter release"
-
-[tasks."release:tags"]
-description = "REMOTE on a version tag (vX.Y.Z): tag the committed Go SDK, a module in a subdirectory (sdk/go/vX.Y.Z). Anywhere else: a dry run"
-run = "charter release-tags sdk/go"
-
-[tasks.workflows]
-description = "Write .github/workflows/ from the tool's templates (never edit the copies)"
-run = "charter workflows"
-
-[tasks."workflows:check"]
-description = "Fail if a workflow in .github/workflows/ differs from the tool's template"
-run = "charter workflows -check"
-
-[tasks."docs:setup"]
-description = "Write the docs site's config and docs/writing.md (the same for every repo; GitHub Pages renders the folder)"
-run = "charter docs"
-
-[tasks."docs:lint"]
-description = "Check docs/ for what a program can check: front matter, links, the index, tasks and paths that don't exist"
-run = "charter docs-lint"
-
-[tasks."docs:check"]
-description = "Fail if the docs site's config differs from what docs:setup writes, or docs/ fails the lint"
-run = "charter docs -check && charter docs-lint"
-
-[tasks."docs:review"]
-description = "Have Claude (the claude command) bring docs/ up to date and into line with docs/writing.md"
-run = "charter docs-review"
-
-[tasks."docs:pages"]
-description = "REMOTE, once per repo: turn on GitHub Pages for docs/ on main (GitHub renders the markdown itself)"
-run = 'gh api -X POST "repos/{owner}/{repo}/pages" -f "source[branch]=main" -f "source[path]=/docs"'
+[tasks."machine:forget"]
+description = "REMOTE: untie a machine's token from its device (after mise run access:token -- revoke <machine>): mise run machine:forget -- <machine>"
+run = "fnox exec -- node scripts/machines.mjs {{env.API_URL}} forget"

@@ -1145,7 +1145,7 @@
     },
     "securitySchemes": {
       "accessClientId": {
-        "description": "A Cloudflare Access service token's Client ID: a machine's own (mise run access:token -- create)",
+        "description": "A Cloudflare Access service token's Client ID: a machine's own (charter access token create)",
         "in": "header",
         "name": "CF-Access-Client-Id",
         "type": "apiKey",
@@ -1165,12 +1165,11 @@
         }
       },
       "bearer": {
-        "description": "The read or write token (READ_TOKEN, WRITE_TOKEN): kept for one release, then removed",
         "scheme": "bearer",
         "type": "http"
       },
       "oidc": {
-        "description": "An access token from the OpenID Connect provider the deployment trusts (OIDC_ISSUER), with the operation's scope",
+        "description": "An access token from the OpenID Connect issuer the deployment trusts (OIDC_ISSUER), with the operation's scopes",
         "openIdConnectUrl": "/.well-known/openid-configuration",
         "type": "openIdConnect"
       }
@@ -1230,6 +1229,11 @@
         },
         "security": [
           {
+            "bearer": [
+              "devices:read"
+            ]
+          },
+          {
             "accessClientId": [
               "devices:read"
             ],
@@ -1237,11 +1241,6 @@
           },
           {
             "oidc": [
-              "devices:read"
-            ]
-          },
-          {
-            "bearer": [
               "devices:read"
             ]
           }
@@ -1338,6 +1337,11 @@
         },
         "security": [
           {
+            "bearer": [
+              "devices:forget"
+            ]
+          },
+          {
             "accessClientId": [
               "devices:forget"
             ],
@@ -1345,11 +1349,6 @@
           },
           {
             "oidc": [
-              "devices:forget"
-            ]
-          },
-          {
-            "bearer": [
               "devices:forget"
             ]
           }
@@ -1443,6 +1442,11 @@
         },
         "security": [
           {
+            "bearer": [
+              "devices:read"
+            ]
+          },
+          {
             "accessClientId": [
               "devices:read"
             ],
@@ -1450,11 +1454,6 @@
           },
           {
             "oidc": [
-              "devices:read"
-            ]
-          },
-          {
-            "bearer": [
               "devices:read"
             ]
           }
@@ -1582,6 +1581,11 @@
         },
         "security": [
           {
+            "bearer": [
+              "devices:read"
+            ]
+          },
+          {
             "accessClientId": [
               "devices:read"
             ],
@@ -1589,11 +1593,6 @@
           },
           {
             "oidc": [
-              "devices:read"
-            ]
-          },
-          {
-            "bearer": [
               "devices:read"
             ]
           }
@@ -1698,6 +1697,11 @@
         },
         "security": [
           {
+            "bearer": [
+              "devices:write"
+            ]
+          },
+          {
             "accessClientId": [
               "devices:write"
             ],
@@ -1705,11 +1709,6 @@
           },
           {
             "oidc": [
-              "devices:write"
-            ]
-          },
-          {
-            "bearer": [
               "devices:write"
             ]
           }

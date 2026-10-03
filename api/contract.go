@@ -13,6 +13,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/joeblew999/charter/go/auth"
 	"github.com/joeblew999/charter/go/humamcp"
 	"github.com/joeblew999/charter/go/humaworkers"
 )
@@ -83,7 +84,7 @@ func Routes(env Env) []humaworkers.Route {
 			huma.Register(api, huma.Operation{
 				OperationID: "hello", Method: http.MethodGet, Path: "/api/hello",
 				Summary: "Say hello: the one operation that needs no credentials", Tags: []string{"meta"},
-				Security:   []map[string][]string{},
+				Security:   auth.Public(),
 				Extensions: sdk("meta", "hello", nil),
 			}, env.hello)
 		}},
@@ -95,7 +96,7 @@ func Routes(env Env) []humaworkers.Route {
 				Description: "Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver. A machine's service token posts only for the device it was enrolled for: another id is 403.",
 				Tags:        []string{"devices"}, DefaultStatus: http.StatusCreated,
 				MaxBodyBytes: DeviceMaxBody,
-				Security:     requires(ScopeWrite),
+				Security:     auth.Needs(ScopeWrite),
 				Errors:       []int{http.StatusForbidden, http.StatusRequestEntityTooLarge},
 				Extensions:   sdk("devices", "report", nil),
 			}, false), env.devicePost)
@@ -110,7 +111,7 @@ func Routes(env Env) []humaworkers.Route {
 			huma.Register(api, huma.Operation{
 				OperationID: "listDevices", Method: http.MethodGet, Path: "/api/devices",
 				Summary: "Every machine as last heard from, with its conditions", Tags: []string{"devices"},
-				Security: requires(ScopeRead), Errors: []int{http.StatusForbidden},
+				Security: auth.Needs(ScopeRead), Errors: []int{http.StatusForbidden},
 				Extensions: sdk("devices", "list", nil),
 			}, env.deviceList)
 		}},
@@ -118,7 +119,7 @@ func Routes(env Env) []humaworkers.Route {
 			huma.Register(api, huma.Operation{
 				OperationID: "getDevice", Method: http.MethodGet, Path: "/api/devices/{id}",
 				Summary: "One machine as last heard from, with its conditions", Tags: []string{"devices"},
-				Security: requires(ScopeRead), Errors: []int{http.StatusForbidden, http.StatusNotFound},
+				Security: auth.Needs(ScopeRead), Errors: []int{http.StatusForbidden, http.StatusNotFound},
 				Extensions: sdk("devices", "get", nil),
 			}, env.deviceGet)
 		}},
@@ -126,7 +127,7 @@ func Routes(env Env) []humaworkers.Route {
 			huma.Register(api, huma.Operation{
 				OperationID: "listDeviceReports", Method: http.MethodGet, Path: "/api/devices/{id}/reports",
 				Summary: "A machine's reports of the last 7 days, newest first", Tags: []string{"devices"},
-				Security: requires(ScopeRead), Errors: []int{http.StatusForbidden, http.StatusNotFound},
+				Security: auth.Needs(ScopeRead), Errors: []int{http.StatusForbidden, http.StatusNotFound},
 				Extensions: sdk("devices", "history", nil),
 			}, env.deviceReports)
 		}},
@@ -137,7 +138,7 @@ func Routes(env Env) []humaworkers.Route {
 				Summary:     "Forget a machine and its reports (devices:forget: a person logged in through Access)",
 				Description: "For a machine that is gone, or an id no longer used. A machine that reports again comes back.",
 				Tags:        []string{"devices"},
-				Security:    requires(ScopeForget),
+				Security:    auth.Needs(ScopeForget),
 				Errors:      []int{http.StatusForbidden, http.StatusNotFound},
 				Extensions:  sdk("devices", "delete", nil),
 			}, false), env.deviceDelete)

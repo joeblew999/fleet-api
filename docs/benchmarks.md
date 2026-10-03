@@ -10,7 +10,7 @@ The only page with the numbers. Each says where and when it was measured.
 
 ## Deployed and live-tested (2026-10-03)
 
-- `mise run deploy` to `https://fleet-api.gedw99.workers.dev`, the account on Workers Paid. A new Worker needs its secrets on the first deploy: `mise run tokens:put` does that deploy.
+- `mise run deploy` to `https://fleet-api.gedw99.workers.dev`, the account on Workers Paid. A new Worker needs its secrets on the first deploy: `mise run deploy` sets them from fnox.
 - `mise run live-test`: 42 checks pass, every route raw (18), through the generated TypeScript SDK (7) and over MCP in both protocol eras (17).
 - A Go program using the committed SDK (`sdk/go/`) posted a report with the write token, listed the machines with the read token, and got `*fleet.UnauthorizedError` posting with the read token.
 
@@ -20,6 +20,15 @@ The only page with the numbers. Each says where and when it was measured.
 - This Mac's token (`fleet-api-apples-macbook-pro`, for `3d30e4bf0117d5f5`): re-posting its own newest report 201 (a duplicate, nothing changed); posting for `0000000000000001` 403.
 - A Go program on the committed SDK, credentials only in `FLEET_API_ACCESS_CLIENT_ID` and `_SECRET`: `Devices.List` answered.
 - The Wasm with `authn` (TinyGo 0.42): 2,688,668 B, 962,978 B gzipped, 113 KB gzipped more than without it; with ES256 too it would be 1,139,261 B gzipped.
+
+## On charter v0.13.0 (2026-10-04)
+
+- `mise run deploy` (charter's: the secrets from fnox), then `mise run live-test`: 45 checks pass, raw, through the TypeScript SDK and over MCP, with the test machine's service token through Access (an MCP tool call included). The two existing service tokens were renamed to charter's `fleet-api:<machine>`, keeping their Client ID and secret; they stayed in the Access policy.
+- This Mac (claude-rig's report task, its token `fleet-api:apples-macbook-pro`): its report posted and listed, with no change on the machine.
+
+## On charter's go/auth (2026-10-03)
+
+- The Wasm with charter v0.12.0's `go/auth` in place of fleet-api's own `authn` (go-jose; RS256, ES256 and EdDSA; TinyGo 0.42): 3,261,138 B, 1,197,218 B gzipped, about 234 KB gzipped more than with `authn`, under the 3 MB limit `mise run build` checks.
 
 ## A real machine's report (2026-10-03)
 

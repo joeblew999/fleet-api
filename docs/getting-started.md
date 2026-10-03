@@ -12,7 +12,7 @@ You need [mise](https://mise.jdx.dev), Go and git; from step 3 Docker, a Cloudfl
 ```sh
 git clone https://github.com/joeblew999/fleet-api && cd fleet-api
 mise install && mise run setup    # tools, then npm packages
-mise run check                    # lint, tests, spec drift, the TinyGo build, the live and MCP tests natively and under workerd
+mise run check                    # lint, tests, spec drift, the TinyGo build, the live, MCP and auth tests natively and under workerd
 ```
 
 The local checks use throwaway tokens (`local-read-token`, `local-write-token`, set in `mise.toml`) and a test issuer they make for Access and OpenID Connect tokens (`test/auth-test.mjs`).
@@ -32,14 +32,14 @@ What a report holds: [The report](guides/report.md). Every route: [Routes](refer
 ## 3. Deploy
 
 ```sh
-mise run build && mise run tokens:put    # once: makes the tokens' Worker secrets (a first deploy needs them)
-mise run access:setup                    # once: Cloudflare Access in front of it, and its secrets
-mise run deploy                          # the Worker, its D1 database, the migrations
-mise run access:token -- create live-test 0000000000000001 fnox    # once: the live test's machine token
+mise run deploy                          # the Worker with its secrets from fnox, its D1 database, the migrations
+mise run access:setup -- <email>...      # once: Cloudflare Access in front of it (see Access first), and its secrets
+mise run access:token -- create live-test fnox    # once: the live test's machine token
+mise run machine:enrol -- live-test 0000000000000001    # which device it posts for
 mise run live-test                       # always after a deploy: every route, the TypeScript SDK and MCP, on Cloudflare
 ```
 
-`tokens:put` reads the two tokens from fnox ([Tokens](guides/tokens.md)); Access and the machines' tokens: [Access](guides/access.md). The live test reports as a test machine, `0000000000000001` (host `live-test`), which stays in the list.
+`deploy` sets the Worker's secrets from fnox every time: the two tokens ([Tokens](guides/tokens.md)) and Access's settings once `access:setup` has made them. Access and the machines' tokens: [Access](guides/access.md). The live test reports as a test machine, `0000000000000001` (host `live-test`), which stays in the list.
 
 ## 4. Read the fleet from anywhere
 
@@ -53,6 +53,7 @@ On a phone: open the URL and log in with GitHub. From Go: [The Go SDK](guides/go
 ## 5. On GitHub
 
 ```sh
-mise run cloudflare:secrets    # once: the deploy workflow's two Cloudflare secrets, from fnox
+mise run cloudflare:secrets    # once: the deploy workflow's Cloudflare and Worker secrets, from fnox
+mise run repo                  # the repo's description, topics, labels, issue forms, workflows, Pages, from charter.toml
 mise run docs:pages            # once: GitHub Pages for docs/
 ```

@@ -12,7 +12,7 @@
 #   ---
 # The start page, README.md, also needs `permalink: /` there: it is the site's home page.
 title: fleet-api
-description: "The fleet's control plane: every machine, what it is, whether it is healthy, and who is using it"
+description: "The fleet's control plane: one place that knows every machine, what it is, whether it is healthy and who is using it. A contract-first Go API on Cloudflare Workers, behind Cloudflare Access."
 aux_links:
   "GitHub": ["https://github.com/joeblew999/fleet-api"]
 gh_edit_repository: https://github.com/joeblew999/fleet-api

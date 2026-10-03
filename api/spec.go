@@ -6,6 +6,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/joeblew999/charter/go/asyncapi"
+	"github.com/joeblew999/charter/go/auth"
 	"github.com/joeblew999/charter/go/humaworkers"
 )
 
@@ -17,10 +18,14 @@ func init() {
 func config() huma.Config {
 	config := humaworkers.Config(Title, Version)
 	config.Info.Description = Description
-	// Who may call what (auth.go): the schemes here; each operation names the scope it needs on
-	// them (TestEveryOperationDeclaresItsSecurity). No API-wide default: Fern's importer drops an
-	// operation's security when it equals the default, and its SDKs then send no credentials there.
-	config.Components.SecuritySchemes = securitySchemes()
+	// Who may call what (auth.go): bearer tokens, Cloudflare Access (a person's login or a machine's
+	// service token) and an OpenID Connect issuer's tokens; each operation names the scope it needs,
+	// by any of them (TestEveryOperationDeclaresItsSecurity). No API-wide default: Fern's importer
+	// drops an operation's security when it equals the default, and its SDKs then send no
+	// credentials there.
+	auth.Scheme(config.OpenAPI)
+	auth.AccessScheme(config.OpenAPI, Title)
+	auth.OIDCScheme(config.OpenAPI)
 	return config
 }
 

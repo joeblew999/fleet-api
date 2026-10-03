@@ -13,19 +13,22 @@ type = "keychain"
 service = "fnox"
 
 [profiles.fleet-api.secrets]
-# This repo's own, named after it: one name for the fnox name, the keychain item and the variable
-# the scripts read. On the Worker they are the secrets READ_TOKEN and WRITE_TOKEN (docs/guides/tokens.md).
-FLEET_API_READ_TOKEN = { provider = "keychain", value = "FLEET_API_READ_TOKEN", description = "fleet-api: reads the fleet" }
-FLEET_API_WRITE_TOKEN = { provider = "keychain", value = "FLEET_API_WRITE_TOKEN", description = "fleet-api: machines post reports" }
-# Cloudflare Access (docs/guides/access.md): written by mise run access:setup and access:token, except
-# the emails, which say who may log in. The client ID and secret are the test machine's service token,
-# which the live test posts with.
-FLEET_API_ACCESS_EMAILS = { provider = "keychain", value = "FLEET_API_ACCESS_EMAILS", description = "fleet-api: who may log in through Access, comma-separated" }
-FLEET_API_ACCESS_APP_ID = { provider = "keychain", value = "FLEET_API_ACCESS_APP_ID", description = "fleet-api: the Access application's id" }
-FLEET_API_ACCESS_AUD = { provider = "keychain", value = "FLEET_API_ACCESS_AUD", description = "fleet-api: the Access application's AUD tag (the Worker's ACCESS_AUD)" }
+# Each name is what the tasks and the Worker read, the names charter uses (WORKER_SECRETS,
+# WORKER_OPTIONAL_SECRETS, go/auth's settings); each value is a keychain item named after this repo,
+# so the owner's keychain holds one item per repo and secret.
+# The bearer tokens: the Worker's READ_TOKEN and WRITE_TOKEN, set by every mise run deploy (docs/guides/tokens.md).
+READ_TOKEN = { provider = "keychain", value = "FLEET_API_READ_TOKEN", description = "fleet-api: reads the fleet" }
+WRITE_TOKEN = { provider = "keychain", value = "FLEET_API_WRITE_TOKEN", description = "fleet-api: posts reports for any machine, forgets machines" }
+# Cloudflare Access (docs/guides/access.md): the Worker's ACCESS_TEAM_DOMAIN and ACCESS_AUD, which every
+# mise run deploy sets, and the application's id.
+ACCESS_TEAM_DOMAIN = { provider = "keychain", value = "CF_ACCESS_TEAM_DOMAIN", description = "fleet-api: the Access team domain (the Worker's ACCESS_TEAM_DOMAIN)" }
+ACCESS_AUD = { provider = "keychain", value = "FLEET_API_ACCESS_AUD", description = "fleet-api: the Access application's AUD tag (the Worker's ACCESS_AUD)" }
+ACCESS_APP_ID = { provider = "keychain", value = "FLEET_API_ACCESS_APP_ID", description = "fleet-api: the Access application's id" }
+# The test machine's service token (fleet-api:live-test), which the live tests post with: the
+# names the SDKs read (go/auth's AccessScheme).
 FLEET_API_ACCESS_CLIENT_ID = { provider = "keychain", value = "FLEET_API_ACCESS_CLIENT_ID", description = "fleet-api: the test machine's Access service token, Client ID" }
 FLEET_API_ACCESS_CLIENT_SECRET = { provider = "keychain", value = "FLEET_API_ACCESS_CLIENT_SECRET", description = "fleet-api: the test machine's Access service token, Client Secret" }
-# Shared, so plain names: tokens:put, cloudflare:secrets and the access tasks use them.
+# Shared, so plain names: deploy, cloudflare:secrets, the access and machine tasks use them.
 CLOUDFLARE_API_TOKEN = { provider = "keychain", value = "CLOUDFLARE_API_TOKEN" }
 CLOUDFLARE_ACCOUNT_ID = { provider = "keychain", value = "CLOUDFLARE_ACCOUNT_ID" }
 CF_ACCESS_TEAM_DOMAIN = { provider = "keychain", value = "CF_ACCESS_TEAM_DOMAIN" }

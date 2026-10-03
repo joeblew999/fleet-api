@@ -1,0 +1,3 @@
+# The repo as `charter repo` keeps it (mise run repo; mise run repo:check changes nothing).
+description = "The fleet's control plane: one place that knows every machine, what it is, whether it is healthy and who is using it. A contract-first Go API on Cloudflare Workers, behind Cloudflare Access."
+topics = ["charter", "fleet", "control-plane", "claude", "go", "cloudflare-workers", "cloudflare-access", "d1", "huma", "golang", "tinygo", "openapi", "fern", "mcp", "contract-first"]
