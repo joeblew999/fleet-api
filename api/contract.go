@@ -25,10 +25,6 @@ const (
 	LiveTitle   = "fleet-api live"
 )
 
-// Bearer is the security scheme: a token in `Authorization: Bearer`. The write token posts reports
-// and reads; the read token only reads (handlers.go).
-const Bearer = "bearer"
-
 // ExampleReport is a valid report: the example the specs, and so the SDKs' docs, show.
 //
 //go:embed example_report.json
@@ -86,20 +82,21 @@ func Routes(env Env) []humaworkers.Route {
 		{Method: http.MethodGet, Path: "/api/hello", OperationID: "hello", Register: func(api huma.API) {
 			huma.Register(api, huma.Operation{
 				OperationID: "hello", Method: http.MethodGet, Path: "/api/hello",
-				Summary: "Say hello: the one operation that needs no token", Tags: []string{"meta"},
+				Summary: "Say hello: the one operation that needs no credentials", Tags: []string{"meta"},
 				Security:   []map[string][]string{},
 				Extensions: sdk("meta", "hello", nil),
 			}, env.hello)
 		}},
 		{Method: http.MethodPost, Path: "/api/devices/{id}/reports", OperationID: "postDeviceReport", Register: func(api huma.API) {
-			// Not an MCP tool: the machines write, with the write token; agents read.
+			// Not an MCP tool: the machines write, each for itself; agents read.
 			huma.Register(api, humamcp.Expose(huma.Operation{
 				OperationID: "postDeviceReport", Method: http.MethodPost, Path: "/api/devices/{id}/reports",
-				Summary:     "Post a machine's report (the write token)",
-				Description: "Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver.",
+				Summary:     "Post a machine's report (devices:write: a machine's service token, for its own id)",
+				Description: "Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver. A machine's service token posts only for the device it was enrolled for: another id is 403.",
 				Tags:        []string{"devices"}, DefaultStatus: http.StatusCreated,
 				MaxBodyBytes: DeviceMaxBody,
-				Errors:       []int{http.StatusRequestEntityTooLarge},
+				Security:     requires(ScopeWrite),
+				Errors:       []int{http.StatusForbidden, http.StatusRequestEntityTooLarge},
 				Extensions:   sdk("devices", "report", nil),
 			}, false), env.devicePost)
 			if schema := api.OpenAPI().Components.Schemas.Map()["DeviceReport"]; schema != nil && len(schema.Examples) == 0 {
@@ -113,6 +110,7 @@ func Routes(env Env) []humaworkers.Route {
 			huma.Register(api, huma.Operation{
 				OperationID: "listDevices", Method: http.MethodGet, Path: "/api/devices",
 				Summary: "Every machine as last heard from, with its conditions", Tags: []string{"devices"},
+				Security: requires(ScopeRead), Errors: []int{http.StatusForbidden},
 				Extensions: sdk("devices", "list", nil),
 			}, env.deviceList)
 		}},
@@ -120,7 +118,7 @@ func Routes(env Env) []humaworkers.Route {
 			huma.Register(api, huma.Operation{
 				OperationID: "getDevice", Method: http.MethodGet, Path: "/api/devices/{id}",
 				Summary: "One machine as last heard from, with its conditions", Tags: []string{"devices"},
-				Errors:     []int{http.StatusNotFound},
+				Security: requires(ScopeRead), Errors: []int{http.StatusForbidden, http.StatusNotFound},
 				Extensions: sdk("devices", "get", nil),
 			}, env.deviceGet)
 		}},
@@ -128,18 +126,19 @@ func Routes(env Env) []humaworkers.Route {
 			huma.Register(api, huma.Operation{
 				OperationID: "listDeviceReports", Method: http.MethodGet, Path: "/api/devices/{id}/reports",
 				Summary: "A machine's reports of the last 7 days, newest first", Tags: []string{"devices"},
-				Errors:     []int{http.StatusNotFound},
+				Security: requires(ScopeRead), Errors: []int{http.StatusForbidden, http.StatusNotFound},
 				Extensions: sdk("devices", "history", nil),
 			}, env.deviceReports)
 		}},
 		{Method: http.MethodDelete, Path: "/api/devices/{id}", OperationID: "deleteDevice", Register: func(api huma.API) {
-			// Not an MCP tool: it changes data, with the write token.
+			// Not an MCP tool: it changes data; a person does it.
 			huma.Register(api, humamcp.Expose(huma.Operation{
 				OperationID: "deleteDevice", Method: http.MethodDelete, Path: "/api/devices/{id}",
-				Summary:     "Forget a machine and its reports (the write token)",
+				Summary:     "Forget a machine and its reports (devices:forget: a person logged in through Access)",
 				Description: "For a machine that is gone, or an id no longer used. A machine that reports again comes back.",
 				Tags:        []string{"devices"},
-				Errors:      []int{http.StatusNotFound},
+				Security:    requires(ScopeForget),
+				Errors:      []int{http.StatusForbidden, http.StatusNotFound},
 				Extensions:  sdk("devices", "delete", nil),
 			}, false), env.deviceDelete)
 		}},

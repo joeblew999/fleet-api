@@ -104,6 +104,34 @@ func WithEnvironment(environment sdkgo.Environment) *core.EnvironmentOption {
 	}
 }
 
+// WithAccessClientID sets the accessClientID auth request header.
+func WithAccessClientID(accessClientID string) *core.AccessClientIDOption {
+	return &core.AccessClientIDOption{
+		AccessClientID: accessClientID,
+	}
+}
+
+// WithAccessClientSecret sets the accessClientSecret auth request header.
+func WithAccessClientSecret(accessClientSecret string) *core.AccessClientSecretOption {
+	return &core.AccessClientSecretOption{
+		AccessClientSecret: accessClientSecret,
+	}
+}
+
+// WithAccessToken sets the 'Authorization: Bearer <accessToken>' request header.
+func WithAccessToken(accessToken string) *core.AccessTokenOption {
+	return &core.AccessTokenOption{
+		AccessToken: accessToken,
+	}
+}
+
+// WithAccessTokenFunc sets a function that returns the 'Authorization: Bearer' token at request time.
+func WithAccessTokenFunc(fn func() (string, error)) *core.AccessTokenFuncOption {
+	return &core.AccessTokenFuncOption{
+		AccessTokenFunc: fn,
+	}
+}
+
 // WithToken sets the 'Authorization: Bearer <token>' request header.
 func WithToken(token string) *core.TokenOption {
 	return &core.TokenOption{

@@ -17,9 +17,10 @@ func init() {
 func config() huma.Config {
 	config := humaworkers.Config(Title, Version)
 	config.Info.Description = Description
-	// A bearer token, required everywhere unless an operation says otherwise (hello).
-	config.Components.SecuritySchemes = map[string]*huma.SecurityScheme{Bearer: {Type: "http", Scheme: "bearer"}}
-	config.Security = []map[string][]string{{Bearer: {}}}
+	// Who may call what (auth.go): the schemes here; each operation names the scope it needs on
+	// them (TestEveryOperationDeclaresItsSecurity). No API-wide default: Fern's importer drops an
+	// operation's security when it equals the default, and its SDKs then send no credentials there.
+	config.Components.SecuritySchemes = securitySchemes()
 	return config
 }
 

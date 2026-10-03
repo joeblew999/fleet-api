@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -13,6 +12,8 @@ import (
 
 	"github.com/joeblew999/charter/go/humamcp"
 	"github.com/joeblew999/charter/go/humaworkers"
+
+	"github.com/joeblew999/fleet-api/authn"
 )
 
 // Env is what the platform supplies: variables and secrets (bindings on Cloudflare, platform_js.go;
@@ -21,9 +22,12 @@ import (
 type Env struct {
 	Var   func(name string) string
 	Store func() (Store, error)
+	// HTTP fetches the keys of the issuers the API trusts (authn): on Workers, workers-go's fetch.
+	// Nil is http.DefaultClient.
+	HTTP *http.Client
 }
 
-// The two secrets. Unset, no token matches: the API refuses everything but hello and the specs.
+// The two secrets of the bearer tokens (auth.go), kept for one release. Unset, no token matches.
 const (
 	WriteToken = "WRITE_TOKEN" // posts reports, and reads
 	ReadToken  = "READ_TOKEN"  // reads
@@ -31,13 +35,21 @@ const (
 
 // Handler serves the contract on env, plus the spec with the request's origin as its server, plus
 // the read operations as MCP tools (/api/mcp: a tool call runs the same operation as the REST
-// route, with the caller's Authorization).
+// route, as the same caller). Every request's credentials are verified first (auth.go): the caller
+// goes in the request's context, and each operation's Security decides.
 func Handler(env Env) http.Handler {
 	routes := humaworkers.New(config(), Routes(env))
 	routes.UseMiddleware(env.authorize(routes))
 	mcp := humamcp.Handler(routes)
+	verifier := &authn.Verifier{Client: env.HTTP}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var spec func(server string) ([]byte, error)
+		switch r.URL.Path {
+		case "/.well-known/oauth-protected-resource", "/.well-known/openid-configuration":
+			env.wellKnown(w, r)
+			return
+		}
+		r = env.withCaller(verifier, r)
 		switch r.URL.Path {
 		case "/api/openapi.json":
 			spec = OpenAPI
@@ -69,47 +81,6 @@ func origin(r *http.Request) string {
 		return "https://" + r.Host
 	}
 	return "http://" + r.Host
-}
-
-// authorize is the contract's security, enforced: an operation needs a token unless its Security is
-// empty (hello). Posting and deleting need the write token; reading takes either.
-func (env Env) authorize(api huma.API) func(huma.Context, func(huma.Context)) {
-	return func(ctx huma.Context, next func(huma.Context)) {
-		op := ctx.Operation()
-		if op.Security != nil && len(op.Security) == 0 {
-			next(ctx)
-			return
-		}
-		token := bearer(ctx.Header("Authorization"))
-		allowed := env.matches(token, WriteToken) || (op.Method == http.MethodGet && env.matches(token, ReadToken))
-		if !allowed {
-			ctx.SetHeader("WWW-Authenticate", "Bearer")
-			message := "a valid token is required: Authorization: Bearer <token>"
-			if op.Method != http.MethodGet {
-				message = "the write token is required: Authorization: Bearer <write token>"
-			}
-			huma.WriteErr(api, ctx, http.StatusUnauthorized, message)
-			return
-		}
-		next(ctx)
-	}
-}
-
-// matches reports whether token is the secret's value, in constant time. An unset secret matches nothing.
-func (env Env) matches(token, secret string) bool {
-	want := ""
-	if env.Var != nil {
-		want = env.Var(secret)
-	}
-	return want != "" && token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(want)) == 1
-}
-
-func bearer(authorization string) string {
-	scheme, token, ok := strings.Cut(authorization, " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(token)
 }
 
 func (env Env) hello(context.Context, *struct{}) (*HelloOutput, error) {

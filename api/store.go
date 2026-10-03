@@ -20,6 +20,9 @@ type Store interface {
 	Reports(ctx context.Context, id string, since int64, limit int) ([]DeviceRow, error)
 	// Forget removes a device's row and its reports: how many reports went, and whether it had a row.
 	Forget(ctx context.Context, id string) (int, bool, error)
+	// Machine is the device a machine's Access service token (its Client ID) was enrolled for: the
+	// machines table, written by mise run access:token -- create.
+	Machine(ctx context.Context, token string) (device string, enrolled bool, err error)
 }
 
 // DeviceRow is a report as kept: as posted (Report), with the columns worked out from it. The json
@@ -38,9 +41,27 @@ type DeviceRow struct {
 
 // MemStore is a Store in one process: for `go run .` and the tests.
 type MemStore struct {
-	mu      sync.Mutex
-	devices map[string]DeviceRow
-	reports []DeviceRow
+	mu       sync.Mutex
+	devices  map[string]DeviceRow
+	reports  []DeviceRow
+	machines map[string]string
+}
+
+// Enrol ties a service token's Client ID to a device, as access:token create does in D1.
+func (m *MemStore) Enrol(token, device string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.machines == nil {
+		m.machines = map[string]string{}
+	}
+	m.machines[token] = device
+}
+
+func (m *MemStore) Machine(_ context.Context, token string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	device, ok := m.machines[token]
+	return device, ok, nil
 }
 
 func (m *MemStore) Put(_ context.Context, row DeviceRow, forget int64) (bool, error) {

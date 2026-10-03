@@ -4,6 +4,7 @@ package meta
 
 import (
 	context "context"
+	os "os"
 
 	fleet "github.com/joeblew999/fleet-api/sdk/go"
 	core "github.com/joeblew999/fleet-api/sdk/go/core"
@@ -20,6 +21,15 @@ type Client struct {
 }
 
 func NewClient(options *core.RequestOptions) *Client {
+	if options.AccessClientID == "" {
+		options.AccessClientID = os.Getenv("FLEET_API_ACCESS_CLIENT_ID")
+	}
+	if options.AccessClientSecret == "" {
+		options.AccessClientSecret = os.Getenv("FLEET_API_ACCESS_CLIENT_SECRET")
+	}
+	if options.AccessToken == "" {
+		options.AccessToken = os.Getenv("FLEET_API_ACCESS_TOKEN")
+	}
 	return &Client{
 		WithRawResponse: NewRawClient(options),
 		options:         options,

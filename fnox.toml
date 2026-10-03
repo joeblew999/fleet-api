@@ -17,6 +17,16 @@ service = "fnox"
 # the scripts read. On the Worker they are the secrets READ_TOKEN and WRITE_TOKEN (docs/guides/tokens.md).
 FLEET_API_READ_TOKEN = { provider = "keychain", value = "FLEET_API_READ_TOKEN", description = "fleet-api: reads the fleet" }
 FLEET_API_WRITE_TOKEN = { provider = "keychain", value = "FLEET_API_WRITE_TOKEN", description = "fleet-api: machines post reports" }
-# Shared, so plain names: tokens:put and cloudflare:secrets use them.
+# Cloudflare Access (docs/guides/access.md): written by mise run access:setup and access:token, except
+# the emails, which say who may log in. The client ID and secret are the test machine's service token,
+# which the live test posts with.
+FLEET_API_ACCESS_EMAILS = { provider = "keychain", value = "FLEET_API_ACCESS_EMAILS", description = "fleet-api: who may log in through Access, comma-separated" }
+FLEET_API_ACCESS_APP_ID = { provider = "keychain", value = "FLEET_API_ACCESS_APP_ID", description = "fleet-api: the Access application's id" }
+FLEET_API_ACCESS_AUD = { provider = "keychain", value = "FLEET_API_ACCESS_AUD", description = "fleet-api: the Access application's AUD tag (the Worker's ACCESS_AUD)" }
+FLEET_API_ACCESS_CLIENT_ID = { provider = "keychain", value = "FLEET_API_ACCESS_CLIENT_ID", description = "fleet-api: the test machine's Access service token, Client ID" }
+FLEET_API_ACCESS_CLIENT_SECRET = { provider = "keychain", value = "FLEET_API_ACCESS_CLIENT_SECRET", description = "fleet-api: the test machine's Access service token, Client Secret" }
+# Shared, so plain names: tokens:put, cloudflare:secrets and the access tasks use them.
 CLOUDFLARE_API_TOKEN = { provider = "keychain", value = "CLOUDFLARE_API_TOKEN" }
 CLOUDFLARE_ACCOUNT_ID = { provider = "keychain", value = "CLOUDFLARE_ACCOUNT_ID" }
+CF_ACCESS_TEAM_DOMAIN = { provider = "keychain", value = "CF_ACCESS_TEAM_DOMAIN" }
+CF_ACCESS_GITHUB_IDP_ID = { provider = "keychain", value = "CF_ACCESS_GITHUB_IDP_ID" }

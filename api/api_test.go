@@ -155,7 +155,7 @@ func TestTokens(t *testing.T) {
 		status                          int
 	}{
 		{"post with no token", "POST", "/api/devices/" + exampleID + "/reports", body, "", 401},
-		{"post with the read token", "POST", "/api/devices/" + exampleID + "/reports", body, testRead, 401},
+		{"post with the read token", "POST", "/api/devices/" + exampleID + "/reports", body, testRead, 403},
 		{"post with a wrong token", "POST", "/api/devices/" + exampleID + "/reports", body, "nope", 401},
 		{"post with the write token", "POST", "/api/devices/" + exampleID + "/reports", body, testWrite, 201},
 		{"list with no token", "GET", "/api/devices", "", "", 401},
@@ -164,7 +164,7 @@ func TestTokens(t *testing.T) {
 		{"history with no token", "GET", "/api/devices/" + exampleID + "/reports", "", "", 401},
 		{"one device with a wrong token", "GET", "/api/devices/" + exampleID, "", "nope", 401},
 		{"delete with no token", "DELETE", "/api/devices/" + exampleID, "", "", 401},
-		{"delete with the read token", "DELETE", "/api/devices/" + exampleID, "", testRead, 401},
+		{"delete with the read token", "DELETE", "/api/devices/" + exampleID, "", testRead, 403},
 		{"delete with the write token", "DELETE", "/api/devices/" + exampleID, "", testWrite, 200},
 	} {
 		headers := []string{}
@@ -172,7 +172,8 @@ func TestTokens(t *testing.T) {
 			headers = []string{"token", c.token}
 		}
 		status, answer, header := do(t, c.method, srv.URL+c.path, c.body, headers...)
-		if status != c.status || (status == 401 && header.Get("WWW-Authenticate") != "Bearer") {
+		if status != c.status || (status == 401 && !strings.HasPrefix(header.Get("WWW-Authenticate"), "Bearer resource_metadata=")) ||
+			(status == 403 && !strings.Contains(header.Get("WWW-Authenticate"), `error="insufficient_scope"`)) {
 			t.Errorf("%s: HTTP %d %s, want %d", c.name, status, answer, c.status)
 		}
 	}
@@ -386,7 +387,10 @@ func TestTheWorkerServesTheSpecWithItsOriginAsServer(t *testing.T) {
 	if !strings.Contains(openapi, `"servers":[{"url":"`+srv.URL+`"}]`) {
 		t.Errorf("openapi servers: %s", openapi)
 	}
-	if !strings.Contains(openapi, `"securitySchemes":{"bearer":{"scheme":"bearer","type":"http"}}`) {
-		t.Errorf("no bearer scheme: %s", openapi)
+	for _, want := range []string{`"name":"CF-Access-Client-Id"`, `"name":"CF-Access-Client-Secret"`, `"openIdConnectUrl":"/.well-known/openid-configuration"`, `"scheme":"bearer"`,
+		`"security":[{"accessClientId":["devices:write"],"accessClientSecret":[]},{"oidc":["devices:write"]},{"bearer":["devices:write"]}]`} {
+		if !strings.Contains(openapi, want) {
+			t.Errorf("the spec has no %s", want)
+		}
 	}
 }

@@ -81,22 +81,22 @@ run = 'go run ./cmd/spec -check fern/openapi.json fern/asyncapi.json {{env.API_U
 
 [tasks.lint]
 description = "gofmt and go vet, for the host and for Wasm"
-run = "charter lint -wasm . *.go api cmd test"
+run = "charter lint -wasm . *.go api authn cmd test"
 
 [tasks.test]
 description = "Go tests: the API, the MCP endpoint, the contract's rules"
 run = "go test ./..."
 
 [tasks."test:native"]
-description = "The live test and the MCP client test against the native build, with throwaway tokens"
+description = "The live test, the MCP client test and the auth test (a test issuer this run makes) against the native build, with throwaway tokens"
 env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token", FLEET_API_READ_TOKEN = "local-read-token", FLEET_API_WRITE_TOKEN = "local-write-token" }
-run = 'charter with-server -url http://localhost:{port}/api/hello -env PORT={port} -start "go run ." -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}"'
+run = 'charter with-server -url http://localhost:{port}/api/hello -env PORT={port} -env ACCESS_TEAM_DOMAIN=http://localhost:{port2} -env ACCESS_AUD=test-aud -env OIDC_ISSUER=http://localhost:{port2} -env OIDC_JWKS=http://localhost:{port2}/jwks -env OIDC_AUDIENCE=https://fleet-api.test -start "go run ." -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}" -run "node test/auth-test.mjs http://localhost:{port} {port2}"'
 
 [tasks."test:workerd"]
-description = "The same against the TinyGo Wasm under workerd (go test can't see TinyGo's gaps)"
+description = "The same against the TinyGo Wasm under workerd (go test can't see TinyGo's gaps, such as its crypto)"
 env = { READ_TOKEN = "local-read-token", WRITE_TOKEN = "local-write-token", FLEET_API_READ_TOKEN = "local-read-token", FLEET_API_WRITE_TOKEN = "local-write-token" }
 depends = ["build"]
-run = 'charter with-server -url http://localhost:{port}/api/hello -env PORT={port} -start "cf dev" -run "charter migrate-local -port {port}" -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}"'
+run = 'charter with-server -url http://localhost:{port}/api/hello -env PORT={port} -env ACCESS_TEAM_DOMAIN=http://localhost:{port2} -env ACCESS_AUD=test-aud -env OIDC_ISSUER=http://localhost:{port2} -env OIDC_JWKS=http://localhost:{port2}/jwks -env OIDC_AUDIENCE=https://fleet-api.test -start "cf dev" -run "charter migrate-local -port {port}" -run "node test/live-test.mjs http://localhost:{port}" -run "node test/mcp-test.mjs http://localhost:{port}" -run "node test/auth-test.mjs http://localhost:{port} {port2}"'
 
 [tasks.mcp-test]
 description = "The MCP client test (/api/mcp, official TypeScript client) against a running mise run run or mise run dev started with the same throwaway tokens"
@@ -138,6 +138,14 @@ run = "charter perf-clean"
 [tasks."tokens:put"]
 description = "REMOTE, once and after a rotation: set the Worker's READ_TOKEN and WRITE_TOKEN secrets from fnox (values are never printed)"
 run = "fnox exec -- node scripts/put-tokens.mjs {{env.API_URL}}"
+
+[tasks."access:setup"]
+description = "REMOTE, once and after changing who may log in: Cloudflare Access in front of the Worker (GitHub login for FLEET_API_ACCESS_EMAILS, a service token per machine), and the Worker's ACCESS_* secrets. Idempotent"
+run = "fnox exec -- node scripts/access.mjs {{env.API_URL}} setup"
+
+[tasks."access:token"]
+description = "REMOTE: a machine's Access service token: mise run access:token -- create <machine> <device id> <file|fnox>, list, revoke <machine>"
+run = "fnox exec -- node scripts/access.mjs {{env.API_URL}} token"
 
 [tasks."cloudflare:secrets"]
 description = "REMOTE, once per repo: copy CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID from fnox into the repo's GitHub secrets, for the deploy workflow"

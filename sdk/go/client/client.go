@@ -3,6 +3,8 @@
 package client
 
 import (
+	os "os"
+
 	core "github.com/joeblew999/fleet-api/sdk/go/core"
 	devices "github.com/joeblew999/fleet-api/sdk/go/devices"
 	internal "github.com/joeblew999/fleet-api/sdk/go/internal"
@@ -21,6 +23,15 @@ type Client struct {
 
 func NewClient(opts ...option.RequestOption) *Client {
 	options := core.NewRequestOptions(opts...)
+	if options.AccessClientID == "" {
+		options.AccessClientID = os.Getenv("FLEET_API_ACCESS_CLIENT_ID")
+	}
+	if options.AccessClientSecret == "" {
+		options.AccessClientSecret = os.Getenv("FLEET_API_ACCESS_CLIENT_SECRET")
+	}
+	if options.AccessToken == "" {
+		options.AccessToken = os.Getenv("FLEET_API_ACCESS_TOKEN")
+	}
 	return &Client{
 		Devices: devices.NewClient(options),
 		Meta:    meta.NewClient(options),
