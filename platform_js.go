@@ -6,11 +6,11 @@ import (
 	"github.com/syumai/workers-go/cloudflare"
 
 	"github.com/joeblew999/charter/go/d1"
-	"github.com/joeblew999/charter/go/hub"
 	"github.com/joeblew999/fleet-api/api"
 )
 
-// env binds the API to the Worker's bindings (cloudflare.config.ts): APP_NAME, DB (D1), HUB (the hub Durable Object, build/hub.mjs).
+// env binds the API to the Worker's bindings (cloudflare.config.ts): APP_NAME, DB (D1), and the
+// secrets READ_TOKEN and WRITE_TOKEN.
 func env() api.Env {
 	return api.Env{
 		Var: cloudflare.Getenv,
@@ -21,6 +21,5 @@ func env() api.Env {
 			}
 			return api.D1Store{DB: db}, nil
 		},
-		Hub: func() (api.Hub, error) { return hub.DurableObject[api.Note]("HUB", "notes") },
 	}
 }

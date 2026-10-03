@@ -4,39 +4,45 @@ package api
 
 import (
 	"context"
-	"errors"
 
 	"github.com/joeblew999/charter/go/d1"
 )
 
-// D1Store is the notes table (migrations/ at the repo root) on the D1 binding itself: one awaited
-// call per statement, and the rows reach Go as one string (package d1). It is what runs on
-// Cloudflare. SQLStore is the same statements through database/sql.
+// D1Store is the two tables (migrations/) on the D1 binding itself: one awaited call per statement,
+// and the rows reach Go as one string (package d1). It is what runs on Cloudflare.
 type D1Store struct{ DB d1.DB }
 
-func (s D1Store) Create(_ context.Context, body string) (Note, error) {
-	notes, err := d1.Query[Note](s.DB, "INSERT INTO notes (body) VALUES (?) RETURNING id, body, created_at", body)
-	if err != nil {
-		return Note{}, err
+const deviceColumns = "id, ts, received, due, reason, next_s, name, os, report"
+
+func (s D1Store) Put(_ context.Context, row DeviceRow, forget int64) (bool, error) {
+	kept, err := d1.Query[DeviceRow](s.DB, "INSERT INTO device_reports (id, ts, received, report) VALUES (?, ?, ?, ?) ON CONFLICT (id, ts) DO NOTHING RETURNING id", row.ID, row.TS, row.Received, row.Report)
+	if err != nil || len(kept) == 0 {
+		return false, err
 	}
-	if len(notes) != 1 {
-		return Note{}, errors.New("the insert returned no note")
+	// The device's row follows its newest report by the device's clock: a resent older one is
+	// history only.
+	if _, err := d1.Query[DeviceRow](s.DB, "INSERT INTO devices ("+deviceColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "+
+		"ON CONFLICT (id) DO UPDATE SET ts = excluded.ts, received = excluded.received, due = excluded.due, reason = excluded.reason, "+
+		"next_s = excluded.next_s, name = excluded.name, os = excluded.os, report = excluded.report WHERE excluded.ts >= devices.ts",
+		row.ID, row.TS, row.Received, row.Due, row.Reason, row.NextS, row.Name, row.OS, row.Report); err != nil {
+		return true, err
 	}
-	return notes[0], nil
+	_, err = d1.Query[DeviceRow](s.DB, "DELETE FROM device_reports WHERE received < ?", forget)
+	return true, err
 }
 
-func (s D1Store) Before(_ context.Context, before int64, limit int) ([]Note, error) {
-	return d1.Query[Note](s.DB, "SELECT id, body, created_at FROM notes WHERE id < ? ORDER BY id DESC LIMIT ?", before, limit)
-}
-
-func (s D1Store) Since(_ context.Context, after int64, limit int) ([]Note, error) {
-	return d1.Query[Note](s.DB, "SELECT id, body, created_at FROM notes WHERE id > ? ORDER BY id LIMIT ?", after, limit)
-}
-
-func (s D1Store) Latest(context.Context) (int64, error) {
-	newest, err := d1.Query[Note](s.DB, "SELECT COALESCE(MAX(id), 0) AS id FROM notes")
-	if err != nil || len(newest) != 1 {
-		return 0, err
+func (s D1Store) Device(_ context.Context, id string) (DeviceRow, bool, error) {
+	rows, err := d1.Query[DeviceRow](s.DB, "SELECT "+deviceColumns+" FROM devices WHERE id = ?", id)
+	if err != nil || len(rows) == 0 {
+		return DeviceRow{}, false, err
 	}
-	return newest[0].ID, nil
+	return rows[0], true, nil
+}
+
+func (s D1Store) Devices(context.Context) ([]DeviceRow, error) {
+	return d1.Query[DeviceRow](s.DB, "SELECT "+deviceColumns+" FROM devices ORDER BY id")
+}
+
+func (s D1Store) Reports(_ context.Context, id string, since int64, limit int) ([]DeviceRow, error) {
+	return d1.Query[DeviceRow](s.DB, "SELECT id, ts, received, report FROM device_reports WHERE id = ? AND received >= ? ORDER BY ts DESC LIMIT ?", id, since, limit)
 }

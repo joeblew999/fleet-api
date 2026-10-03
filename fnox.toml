@@ -1,0 +1,12 @@
+# Where this repo's secrets are: the macOS keychain (service "fnox"), never a file. This file only
+# maps each environment variable to its keychain item, so it is safe to commit. A task that needs
+# them runs under `fnox exec`. The Cloudflare credentials come from the global fnox config.
+#   READ_TOKEN, WRITE_TOKEN: the Worker's two secrets (docs/guides/tokens.md)
+
+[providers.keychain]
+type = "keychain"
+service = "fnox"
+
+[secrets]
+READ_TOKEN= { provider = "keychain", value = "FLEET_API_READ_TOKEN", description = "fleet-api: reads the fleet" }
+WRITE_TOKEN= { provider = "keychain", value = "FLEET_API_WRITE_TOKEN", description = "fleet-api: machines post reports" }

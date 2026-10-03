@@ -1,66 +1,77 @@
-// Live test of the API's real-time paths: an SSE client (GET /api/notes/watch) and a WebSocket
-// client (/api/notes/live) connect, a note is created, and both must receive it (through
-// the hub Durable Object); then SSE resume after a reconnect. Usage, from the project's
-// folder (`ws` comes from its node_modules): node test/live-test.mjs <origin>
-import { createRequire } from "node:module";
-const WebSocket = createRequire(`${process.cwd()}/`)("ws");
+// Live test of the device API: a report posted with the write token is read back, as posted,
+// through the list, the device's view and its history; the tokens, the rules and the limits hold.
+// It reports as the test machine 0000000000000001 (host live-test), which then stays in the list.
+// Usage, from the project's folder, with READ_TOKEN and WRITE_TOKEN set: node test/live-test.mjs <origin>
+import { readFileSync } from "node:fs";
 
 const origin = process.argv[2];
-const body = `live ${Date.now()}`;
-const got = { sse: null, ws: null, resume: null };
-
-// SSE: read the event stream until our note arrives.
-const sse = (async () => {
-  const res = await fetch(`${origin}/api/notes/watch?seconds=20`, { headers: { accept: "text/event-stream" } });
-  const decoder = new TextDecoder(); let buf = "";
-  for await (const chunk of res.body) {
-    buf += decoder.decode(chunk, { stream: true });
-    for (const line of buf.split("\n")) if (line.startsWith("data:") && line.includes(body)) { got.sse = JSON.parse(line.slice(5)); return; }
-  }
-})();
-
-// WebSocket: wait for our note.
-const ws = new WebSocket(`${origin.replace(/^http/, "ws")}/api/notes/live`);
-const wsDone = new Promise((resolve, reject) => {
-  ws.on("message", data => { const note = JSON.parse(String(data)); if (note.body === body) { got.ws = note; resolve(); } });
-  ws.on("error", reject);
-});
-await new Promise(r => ws.on("open", r));
-await new Promise(r => setTimeout(r, 1500)); // let the SSE stream attach to the hub
-
-const created = await (await fetch(`${origin}/api/notes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body }) })).json();
-await Promise.race([Promise.all([sse, wsDone]), new Promise(r => setTimeout(r, 10000))]);
-ws.close();
-
-// Resume: disconnect, miss a note, reconnect with Last-Event-ID -> the missed note is replayed
-// from D1, the log: follow() catches up from the position the client names.
-async function sseEvents(headers, seconds, until) {
-  const res = await fetch(`${origin}/api/notes/watch?seconds=${seconds}`, { headers: { accept: "text/event-stream", ...headers } });
-  const decoder = new TextDecoder(); let buf = ""; const events = [];
-  for await (const chunk of res.body) {
-    buf += decoder.decode(chunk, { stream: true });
-    const blocks = buf.split("\n\n"); buf = blocks.pop();
-    for (const block of blocks) {
-      const id = /^id: ?(.*)$/m.exec(block)?.[1], data = /^data: ?(.*)$/m.exec(block)?.[1];
-      if (data) { events.push({ id, note: JSON.parse(data) }); if (until(events)) return events; }
-    }
-  }
-  return events;
+const { READ_TOKEN: read, WRITE_TOKEN: write } = process.env;
+if (!read || !write) {
+  console.log("FAIL  READ_TOKEN and WRITE_TOKEN must be set (on Cloudflare: fnox exec -- ...)");
+  process.exit(1);
 }
-const first = sseEvents({}, 8, events => events.some(e => e.note.body === `${body} a`));
-await new Promise(r => setTimeout(r, 1500));
-await fetch(`${origin}/api/notes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: `${body} a` }) });
-const lastId = (await first).at(-1)?.id;
-const missed = await (await fetch(`${origin}/api/notes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: `${body} b` }) })).json();
-const replayed = await sseEvents({ "last-event-id": lastId }, 4, events => events.some(e => e.note.id === missed.id));
-got.resume = replayed.find(e => e.note.id === missed.id)?.note ?? null;
-created.resumeId = missed.id;
+const id = "0000000000000001";
+const example = JSON.parse(readFileSync("api/example_report.json", "utf8"));
+const ts = Date.now();
+const report = { ...example, id, ts, reason: "once", next_s: 0, host: { ...example.host, name: "live-test" }, thermal: { status: "ok", pressure: "nominal" } };
 
 let failed = 0;
-for (const [name, note] of Object.entries(got)) {
-  const ok = note?.id === (name === "resume" ? created.resumeId : created.id);
-  const label = { sse: "SSE /api/notes/watch", ws: "WebSocket /api/notes/live (Durable Object)", resume: "SSE resume: missed note replayed after reconnect (Last-Event-ID)" }[name];
-  console.log(`${ok ? "PASS" : "FAIL"}  ${label}: ${JSON.stringify(note)}`);
+function check(name, ok, detail) {
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${ok ? "" : `: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`}`);
   if (!ok) failed++;
 }
+async function call(method, path, { token, body } = {}) {
+  const headers = { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { "content-type": "application/json" } : {}) };
+  const res = await fetch(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+  return { status: res.status, json, text };
+}
+const reports = `/api/devices/${id}/reports`;
+
+const hello = await call("GET", "/api/hello");
+check("hello needs no token", hello.status === 200 && hello.json?.message?.startsWith("Hello from"), hello);
+
+for (const [name, token] of [["no token", undefined], ["the read token", read], ["a wrong token", "nope"]]) {
+  const refused = await call("POST", reports, { token, body: report });
+  check(`posting with ${name} is 401`, refused.status === 401, refused.status);
+}
+const refusedRead = await call("GET", "/api/devices");
+check("reading with no token is 401", refusedRead.status === 401, refusedRead.status);
+
+const posted = await call("POST", reports, { token: write, body: report });
+check("a report posted with the write token is 201", posted.status === 201 && posted.json?.duplicate === false && posted.json?.id === id, posted.json ?? posted.text);
+const again = await call("POST", reports, { token: write, body: report });
+check("the same report again is a duplicate", again.status === 201 && again.json?.duplicate === true, again.json ?? again.text);
+
+const one = await call("GET", `/api/devices/${id}`, { token: read });
+check("the device's view has the report as posted, a newer tool's field too", one.status === 200 && one.json?.report?.ts === ts && one.json.report.thermal?.pressure === "nominal" && one.json.report.rig?.status === "ok" && one.json.report.claims?.held?.length === 1, one.json ?? one.text);
+check("a report that promises nothing has no due and no conditions", one.json && one.json.due === undefined && one.json.conditions?.length === 0, one.json);
+
+const list = await call("GET", "/api/devices", { token: read });
+check("the list has it, with the Worker's clock", list.status === 200 && list.json?.devices?.some(d => d.report.id === id && d.report.ts === ts) && list.json.now >= posted.json?.received, list.json ?? list.text);
+
+const history = await call("GET", `${reports}?limit=5`, { token: read });
+check("the history has it, newest first", history.status === 200 && history.json?.reports?.[0]?.report?.ts === ts && history.json.reports.every((r, i, all) => i === 0 || all[i - 1].report.ts >= r.report.ts), history.json ?? history.text);
+
+const writerReads = await call("GET", `/api/devices/${id}`, { token: write });
+check("the write token reads too", writerReads.status === 200, writerReads.status);
+
+for (const [name, change, location] of [
+  ["percent 101 (a tag)", r => { r.battery = { ...r.battery, percent: 101 }; }, "body.battery.percent"],
+  ["unknown with no reason (a rule)", r => { r.lid = { status: "unknown" }; }, "body.lid.why"],
+  ["a home directory (a rule)", r => { r.rig = { ...r.rig, work_dir: "/Users/someone/work" }; }, "body.rig.work_dir"],
+  ["another machine's id", r => { r.id = "00aa11bb22cc33dd"; }, "body.id"],
+]) {
+  const bad = structuredClone(report);
+  change(bad);
+  const refused = await call("POST", reports, { token: write, body: bad });
+  check(`${name} is 422 at ${location}`, refused.status === 422 && refused.json?.errors?.some(e => e.location === location), refused.json ?? refused.text);
+}
+const big = await call("POST", reports, { token: write, body: { ...report, ts: ts + 1, pad: "x".repeat(17000) } });
+check("a report over 16 KiB is 413", big.status === 413, big.status);
+const unknown = await call("GET", "/api/devices/ffffffffffffffff", { token: read });
+check("a machine that never reported is 404", unknown.status === 404, unknown.status);
+
 process.exit(failed ? 1 : 0);

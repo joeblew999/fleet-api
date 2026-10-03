@@ -1,19 +1,19 @@
-// Package api is the notes API, contract first, in Go. Every route is a Huma operation whose input and output are Go structs; the
-// struct tags are the schema (as Zod is for oRPC). From this one definition come the handlers'
-// validation, the OpenAPI spec and the AsyncAPI spec (spec.go), from which Fern makes SDKs, a CLI
-// and docs. Everything the SDKs need is said here too: OperationID and Tags name the SDK methods,
-// and Extensions carry Fern's x-fern-*. The `example` tags are what the SDKs' READMEs and references
-// show: without one Fern makes a value up, which a pattern or a bound then refuses
+// Package api is the fleet's device API, contract first, in Go. Every route is a Huma operation whose
+// input and output are Go structs; the struct tags are the schema (device.go holds the report). From
+// this one definition come the handlers' validation, the OpenAPI spec (spec.go), and from it Fern's
+// SDKs and CLI. OperationID and Tags name the SDK methods, and Extensions carry Fern's x-fern-*.
+// The `example` tags, and the example report, are what the SDKs' READMEs and references show
 // (TestExamplesAreThereAndValid).
 package api
 
 import (
+	_ "embed"
+	"encoding/json"
 	"net/http"
-	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/joeblew999/charter/go/asyncapi"
+	"github.com/joeblew999/charter/go/humamcp"
 	"github.com/joeblew999/charter/go/humaworkers"
 )
 
@@ -21,30 +21,18 @@ import (
 const (
 	Title       = "fleet-api"
 	Version     = "1.0.0"
-	Description = "Notes API: Huma contract (Go) -> OpenAPI -> Fern."
+	Description = "One place that knows every machine in the fleet, what it is, whether it is healthy, and who is using it: readable from anywhere, written by the machines themselves."
 	LiveTitle   = "fleet-api live"
 )
 
-// END is what a planned stream end returns: SSE `event: close` with `data: "[end-of-stream]"`,
-// Fern's terminator for watch. Fern matches the terminator as a substring of each event's data, so
-// no note may contain it (note bodies reject it), and it is plain text because Fern's Rust generator
-// pastes it into source unescaped.
-// Upstream: fern-api/fern#17936 (when fixed: terminators match whole data values, so the body rule can go)
-// Upstream: fern-api/fern#17939 (when fixed: the Rust generator escapes it, so any text would do)
-const END = "[end-of-stream]"
+// Bearer is the security scheme: a token in `Authorization: Bearer`. The write token posts reports
+// and reads; the read token only reads (handlers.go).
+const Bearer = "bearer"
 
-// Note is the one resource.
-type Note struct {
-	ID        int64  `json:"id" example:"42"`
-	Body      string `json:"body" example:"Buy milk"`
-	CreatedAt string `json:"created_at" example:"2026-10-01 12:00:00"`
-}
-
-// Position is the note's place in the log: the only position anywhere (docs/guides/streaming.md, rule 1).
-func (n Note) Position() int64 { return n.ID }
-
-// The resume position in every stream: a note id, as an opaque string like list's cursor.
-const afterDoc = "Resume after this note id (the id of the last note you received). Absent: only notes created from now on"
+// ExampleReport is a valid report: the example the specs, and so the SDKs' docs, show.
+//
+//go:embed example_report.json
+var ExampleReport []byte
 
 type HelloOutput struct {
 	Body struct {
@@ -52,43 +40,30 @@ type HelloOutput struct {
 	}
 }
 
-type ListInput struct {
-	// Opaque string cursors: the generated CLI's --page-all stops on numeric ones.
-	Cursor string `query:"cursor" example:"42" doc:"Opaque cursor from the previous page's next_cursor"`
-	// int32, not int: Huma writes `format`, and Fern's Go SDK then types it as int, as a TypeScript contract's spec gives.
-	Limit int32 `query:"limit" minimum:"1" maximum:"100" default:"20" example:"20"`
+type DevicePostInput struct {
+	ID      string `path:"id" pattern:"^[0-9a-f]{16}$" example:"3f9a1c0b7d2e4a65" doc:"The machine id; must be the report's id"`
+	Body    DeviceReport
+	RawBody []byte // the report as posted: what is stored, so a newer tool's fields survive
 }
 
-type ListOutput struct {
-	Body struct {
-		Data       []Note `json:"data"`
-		NextCursor string `json:"next_cursor,omitempty" example:"41" doc:"Pass as cursor for the next page; absent on the last page"`
-	}
+type DevicePostOutput struct{ Body DevicePosted }
+
+type DeviceGetInput struct {
+	ID string `path:"id" pattern:"^[0-9a-f]{16}$" example:"3f9a1c0b7d2e4a65" doc:"The machine id: 16 lower-case hex digits"`
 }
 
-type WatchInput struct {
-	After   string `query:"after" pattern:"^\\d+$" example:"42" doc:"Resume after this note id (the id of the last note you received). Absent: only notes created from now on"`
-	Seconds int32  `query:"seconds" minimum:"1" maximum:"300" default:"30" example:"30" doc:"How long to keep the stream open"`
-	// What a browser's EventSource sends when it reconnects: the same position as After. Not in the
-	// spec: generated clients use After.
-	LastEventID string `header:"Last-Event-ID" hidden:"true"`
+type DeviceOutput struct{ Body DeviceView }
+
+type DevicesOutput struct{ Body DeviceList }
+
+type DeviceReportsInput struct {
+	ID string `path:"id" pattern:"^[0-9a-f]{16}$" example:"3f9a1c0b7d2e4a65" doc:"The machine id: 16 lower-case hex digits"`
+	// The example is small: under TinyGo (32-bit int) Huma panics on an int tag over 2^31 (a time in ms).
+	Since int64 `query:"since" minimum:"0" example:"0" doc:"Only reports received at or after this, Unix milliseconds; 0: all that are kept"`
+	Limit int32 `query:"limit" minimum:"1" maximum:"500" default:"50" example:"50" doc:"At most this many, newest first"`
 }
 
-type LiveInput struct {
-	After string `query:"after" pattern:"^\\d+$" example:"42" doc:"Resume after this note id (the id of the last note you received). Absent: only notes created from now on"`
-	// The Worker's entry (worker.mjs) passes the upgrade request on; a plain GET is refused.
-	Upgrade string `header:"Upgrade" hidden:"true"`
-}
-
-type CreateInput struct {
-	Body struct {
-		Body string `json:"body" minLength:"1" example:"Buy milk"`
-	}
-}
-
-type NoteOutput struct {
-	Body Note
-}
+type DeviceReportsOutput struct{ Body DeviceHistory }
 
 // sdk is Fern's names for the SDK method: client.<group>.<method>() and `cli <group> <method>`.
 func sdk(group, method string, extra map[string]any) map[string]any {
@@ -105,52 +80,51 @@ func Routes(env Env) []humaworkers.Route {
 		{Method: http.MethodGet, Path: "/api/hello", OperationID: "hello", Register: func(api huma.API) {
 			huma.Register(api, huma.Operation{
 				OperationID: "hello", Method: http.MethodGet, Path: "/api/hello",
-				Summary: "Say hello", Tags: []string{"meta"},
+				Summary: "Say hello: the one operation that needs no token", Tags: []string{"meta"},
+				Security:   []map[string][]string{},
 				Extensions: sdk("meta", "hello", nil),
 			}, env.hello)
 		}},
-		{Method: http.MethodGet, Path: "/api/notes", OperationID: "listNotes", Register: func(api huma.API) {
-			huma.Register(api, huma.Operation{
-				OperationID: "listNotes", Method: http.MethodGet, Path: "/api/notes",
-				Summary: "List notes, newest first (cursor pagination)", Tags: []string{"notes"},
-				Extensions: sdk("notes", "list", map[string]any{
-					"x-fern-pagination": map[string]any{"cursor": "$request.cursor", "next_cursor": "$response.next_cursor", "results": "$response.data"},
-				}),
-			}, env.list)
+		{Method: http.MethodPost, Path: "/api/devices/{id}/reports", OperationID: "postDeviceReport", Register: func(api huma.API) {
+			// Not an MCP tool: the machines write, with the write token; agents read.
+			huma.Register(api, humamcp.Expose(huma.Operation{
+				OperationID: "postDeviceReport", Method: http.MethodPost, Path: "/api/devices/{id}/reports",
+				Summary:     "Post a machine's report (the write token)",
+				Description: "Stored as posted. The same id and ts again is a duplicate and changes nothing, so a machine can resend what it could not deliver.",
+				Tags:        []string{"devices"}, DefaultStatus: http.StatusCreated,
+				MaxBodyBytes: DeviceMaxBody,
+				Errors:       []int{http.StatusRequestEntityTooLarge},
+				Extensions:   sdk("devices", "report", nil),
+			}, false), env.devicePost)
+			if schema := api.OpenAPI().Components.Schemas.Map()["DeviceReport"]; schema != nil && len(schema.Examples) == 0 {
+				var example any
+				if json.Unmarshal(ExampleReport, &example) == nil {
+					schema.Examples = []any{example}
+				}
+			}
 		}},
-		{Method: http.MethodGet, Path: "/api/notes/watch", OperationID: "watchNotes", Register: func(api huma.API) {
+		{Method: http.MethodGet, Path: "/api/devices", OperationID: "listDevices", Register: func(api huma.API) {
 			huma.Register(api, huma.Operation{
-				OperationID: "watchNotes", Method: http.MethodGet, Path: "/api/notes/watch",
-				Summary:     "Stream notes as they are created (Server-Sent Events). The stream ends after `seconds`; call again with `after` = the last note id to continue without gaps",
-				Description: "Each event's SSE id is the note id, so a browser EventSource resumes by itself (Last-Event-ID).",
-				Tags:        []string{"notes"},
-				// An SSE stream whose `data:` payloads are notes.
-				Responses: map[string]*huma.Response{"200": {
-					Description: "OK",
-					Content:     map[string]*huma.MediaType{"text/event-stream": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[Note](), true, "")}},
-				}},
-				// resumable: the SDKs reconnect by themselves on a drop, sending Last-Event-ID (= the note id).
-				// The terminator marks a planned end, so they only reconnect on genuine drops.
-				Extensions: sdk("notes", "watch", map[string]any{
-					"x-fern-streaming": map[string]any{"format": "sse", "terminator": END, "resumable": true},
-				}),
-			}, env.watch)
+				OperationID: "listDevices", Method: http.MethodGet, Path: "/api/devices",
+				Summary: "Every machine as last heard from, with its conditions", Tags: []string{"devices"},
+				Extensions: sdk("devices", "list", nil),
+			}, env.deviceList)
 		}},
-		// The WebSocket channel: in the AsyncAPI spec, not in OpenAPI. Plain JSON notes; `after` (a
-		// query parameter) resumes, the same position as watch.
-		{Method: http.MethodGet, Path: "/api/notes/live", OperationID: "liveNotes", Register: func(api huma.API) {
-			huma.Register(api, asyncapi.Operation(huma.Operation{
-				OperationID: "liveNotes", Method: http.MethodGet, Path: "/api/notes/live",
-				Summary: "New notes over a WebSocket, as plain JSON. On close, reconnect with `after` = the last note id to continue without gaps",
-				Errors:  []int{http.StatusUpgradeRequired},
-			}, asyncapi.Channel{Name: "liveNotes", OperationID: "receiveNote", Message: "Note", Payload: Note{}}), env.live)
-		}},
-		{Method: http.MethodPost, Path: "/api/notes", OperationID: "createNote", Register: func(api huma.API) {
+		{Method: http.MethodGet, Path: "/api/devices/{id}", OperationID: "getDevice", Register: func(api huma.API) {
 			huma.Register(api, huma.Operation{
-				OperationID: "createNote", Method: http.MethodPost, Path: "/api/notes",
-				Summary: "Create a note", Tags: []string{"notes"},
-				Extensions: sdk("notes", "create", nil),
-			}, env.create)
+				OperationID: "getDevice", Method: http.MethodGet, Path: "/api/devices/{id}",
+				Summary: "One machine as last heard from, with its conditions", Tags: []string{"devices"},
+				Errors:     []int{http.StatusNotFound},
+				Extensions: sdk("devices", "get", nil),
+			}, env.deviceGet)
+		}},
+		{Method: http.MethodGet, Path: "/api/devices/{id}/reports", OperationID: "listDeviceReports", Register: func(api huma.API) {
+			huma.Register(api, huma.Operation{
+				OperationID: "listDeviceReports", Method: http.MethodGet, Path: "/api/devices/{id}/reports",
+				Summary: "A machine's reports of the last 7 days, newest first", Tags: []string{"devices"},
+				Errors:     []int{http.StatusNotFound},
+				Extensions: sdk("devices", "history", nil),
+			}, env.deviceReports)
 		}},
 	}
 }

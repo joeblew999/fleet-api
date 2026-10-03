@@ -1,41 +1,55 @@
 ---
-title: Start here
+title: Home
 nav_order: 1
 permalink: /
 ---
 
 # fleet-api
 
-Everything written about this project lives in this folder. `AGENTS.md` only points here.
+> One place that knows every machine in the fleet, what it is, whether it is healthy, and who is using it — readable from anywhere, written by the machines themselves.
 
-| Page | What it covers |
-|---|---|
-| This page | What is what |
-| [rules.md](rules.md) | The working rules |
-| [writing.md](writing.md) | The rules a page in `docs/` is held to |
+Each machine posts a report about itself; anyone with the read token reads the fleet, from a phone, a script or an agent. A Go API on Cloudflare Workers, made with [charter](https://github.com/joeblew999/charter). Start with [Getting started](getting-started.md).
 
-## What is what
+## What you get
 
-You write the contract in Go; everything else is generated from it.
+- **One report per machine** ([The report](guides/report.md)): what it is (host, CPU, memory, disks, power, battery, lid, sleep), the Claude worker on it (`rig`) and who holds it (`claims`). Every section says ok, none or unknown, so a zero is always a measured zero.
+- **Four routes** ([Routes](reference/routes.md)): post a report, list the machines, one machine with its conditions, a machine's history of the last 7 days.
+- **Two tokens** ([Tokens](guides/tokens.md)): machines write, readers read.
+- **A Go SDK** another repo can `go get` ([The Go SDK](guides/go-sdk.md)), a TypeScript SDK, and the read routes as MCP tools at `/api/mcp`.
+
+Deployed at `https://fleet-api.gedw99.workers.dev`.
+
+## What is where
 
 | | |
 |---|---|
-| **The contract (the source; you edit this)** | `api/contract.go` (Huma: Go structs and their tags) |
-| The server | `api/handlers.go` |
-| The Worker's entry | `worker.mjs`. The rest of the JavaScript is the Go library's: the build writes it into `build/` |
-| Write the specs | `mise run spec` |
-| **The specs (generated; never edit)** | `fern/openapi.json`, `fern/asyncapi.json` |
-| Fern's settings | `fern/generators.yml` |
-| Generate an SDK | `mise run sdk:gen <group>` (go, typescript, typescript-dist, cli) into `sdk/out/` |
+| **The contract (the source)** | `api/contract.go` (routes), `api/device.go` (the report and its rules) |
+| The server | `api/handlers.go` (tokens, conditions), `api/store.go` and `api/store_js.go` (memory, D1) |
 | The D1 schema | `migrations/` |
-| The tests a deploy must pass | `test/` (`mise run live-test`, `mise run soak`) |
-| MCP | `/api/mcp`: every one-shot operation of the contract is a tool |
-| The tasks | `mise.toml`: each is one line, and what needs more is a command of the charter tool it pins |
+| The tests | `api/*_test.go`; `test/` (run natively, under workerd and against Cloudflare) |
+| Fern's settings | `fern/generators.yml` |
+| Where the tokens are | `fnox.toml` names them; the values are in the macOS keychain |
+| The tasks | `mise.toml`: each is one line |
 
-The project starts as the notes example. Which files hold it, and what to do with each when you put your
-own API in: [Replace the example with your API](https://joeblew999.github.io/charter/guides/replace-the-example.html).
+## What is generated
 
-How it works, what Huma needs on workers-go, the real-time design and the measured costs are documented
-once, in [charter's docs](https://joeblew999.github.io/charter/): the Go library this project requires
-(`github.com/joeblew999/charter/go`: `humaworkers`, `asyncapi`, `follow`, `hub`, `d1`, `humamcp`, `transport`, `specfile`, and the Worker
-glue the build writes into `build/`) comes from there.
+Never edit these: change the source and run the task.
+
+| Path | Written by |
+|---|---|
+| `fern/openapi.json`, `fern/asyncapi.json` | `mise run spec`, from the contract |
+| `sdk/go/` (committed), `sdk/out/` | `mise run sdk:publish`, `mise run sdk:gen` |
+| `build/` | `mise run build` |
+| `.github/` | `mise run workflows` |
+| `docs/_config.yml`, `docs/writing.md`, `docs/llms.txt`, `docs/_sass/` | `mise run docs:setup` |
+
+## Every page
+
+| Section | Pages |
+|---|---|
+| Start | [Getting started](getting-started.md) |
+| [Guides](guides.md) | [The report](guides/report.md), [Tokens](guides/tokens.md), [The Go SDK](guides/go-sdk.md) |
+| [Reference](reference.md) | [Routes](reference/routes.md) |
+| [How to help](contributing.md) | [Rules](rules.md), [Benchmarks](benchmarks.md), [Writing docs](writing.md) |
+
+How the project is built (Huma on workers-go, TinyGo, Fern) is documented once, in [charter's docs](https://joeblew999.github.io/charter/).

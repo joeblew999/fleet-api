@@ -10,7 +10,7 @@ import (
 
 var memory = &api.MemStore{}
 
-// env is one in-memory store and hub for the process.
+// env is one in-memory store for the process, and the environment's READ_TOKEN and WRITE_TOKEN.
 func env() api.Env {
 	return api.Env{
 		Var: func(name string) string {
@@ -20,6 +20,5 @@ func env() api.Env {
 			return os.Getenv(name)
 		},
 		Store: func() (api.Store, error) { return memory, nil },
-		Hub:   func() (api.Hub, error) { return memory, nil },
 	}
 }

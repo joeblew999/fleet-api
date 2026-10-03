@@ -1,31 +1,36 @@
 package api
 
 import (
-	"bufio"
-	"context"
 	"encoding/json"
-	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
-// A real HTTP server over the in-memory store and hub: the handlers as `go run .` serves them.
+const (
+	testRead  = "test-read-token"
+	testWrite = "test-write-token"
+	exampleID = "3f9a1c0b7d2e4a65"
+)
+
+// A real HTTP server over the in-memory store: the handlers as `go run .` serves them.
 func server(t *testing.T) (*httptest.Server, *MemStore) {
 	t.Helper()
 	memory := &MemStore{}
+	settings := map[string]string{"APP_NAME": "test", ReadToken: testRead, WriteToken: testWrite}
 	env := Env{
-		Var:   func(string) string { return "test" },
+		Var:   func(name string) string { return settings[name] },
 		Store: func() (Store, error) { return memory, nil },
-		Hub:   func() (Hub, error) { return memory, nil },
 	}
 	srv := httptest.NewServer(Handler(env))
 	t.Cleanup(srv.Close)
 	return srv, memory
 }
 
+// do sends a request; headers are name, value pairs. "token" as a name is shorthand for
+// Authorization: Bearer.
 func do(t *testing.T, method, url, body string, headers ...string) (int, string, http.Header) {
 	t.Helper()
 	req, err := http.NewRequest(method, url, strings.NewReader(body))
@@ -36,37 +41,44 @@ func do(t *testing.T, method, url, body string, headers ...string) (int, string,
 		req.Header.Set("Content-Type", "application/json")
 	}
 	for i := 0; i+1 < len(headers); i += 2 {
-		req.Header.Set(headers[i], headers[i+1])
+		if headers[i] == "token" {
+			req.Header.Set("Authorization", "Bearer "+headers[i+1])
+		} else {
+			req.Header.Set(headers[i], headers[i+1])
+		}
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	var b strings.Builder
-	scanner := bufio.NewScanner(res.Body)
-	for scanner.Scan() {
-		b.WriteString(scanner.Text() + "\n")
-	}
-	return res.StatusCode, b.String(), res.Header
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(b), res.Header
 }
 
-func create(t *testing.T, base, body string) Note {
+// edit returns the example report with changes made to it.
+func edit(t *testing.T, change func(m map[string]any)) string {
 	t.Helper()
-	status, out, _ := do(t, "POST", base+"/api/notes", `{"body":`+quote(body)+`}`)
-	if status != 200 {
-		t.Fatalf("create: HTTP %d %s", status, out)
-	}
-	var note Note
-	if err := json.Unmarshal([]byte(out), &note); err != nil {
+	var m map[string]any
+	if err := json.Unmarshal(ExampleReport, &m); err != nil {
 		t.Fatal(err)
 	}
-	return note
+	if change != nil {
+		change(m)
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
 }
 
-func quote(s string) string { b, _ := json.Marshal(s); return string(b) }
+func section(m map[string]any, name string) map[string]any { return m[name].(map[string]any) }
 
-func TestHello(t *testing.T) {
+func post(t *testing.T, base, body string) (int, string) {
+	t.Helper()
+	status, answer, _ := do(t, "POST", base+"/api/devices/"+exampleID+"/reports", body, "token", testWrite)
+	return status, answer
+}
+
+func TestHelloNeedsNoToken(t *testing.T) {
 	srv, _ := server(t)
 	status, body, _ := do(t, "GET", srv.URL+"/api/hello", "")
 	if status != 200 || strings.TrimSpace(body) != `{"message":"Hello from test"}` {
@@ -74,45 +86,205 @@ func TestHello(t *testing.T) {
 	}
 }
 
-func TestCreateAndListWithCursor(t *testing.T) {
-	srv, _ := server(t)
-	for _, body := range []string{"a", "b", "c"} {
-		create(t, srv.URL, body)
+func TestTheExampleReportIsValid(t *testing.T) {
+	var r DeviceReport
+	if err := json.Unmarshal(ExampleReport, &r); err != nil {
+		t.Fatal(err)
 	}
-	_, page1, _ := do(t, "GET", srv.URL+"/api/notes?limit=2", "")
-	if strings.TrimSpace(page1) == "" || !strings.Contains(page1, `"next_cursor":"2"`) || strings.Index(page1, `"id":3`) > strings.Index(page1, `"id":2`) {
-		t.Fatalf("page 1 (newest first, next_cursor 2): %s", page1)
-	}
-	_, page2, _ := do(t, "GET", srv.URL+"/api/notes?limit=2&cursor=2", "")
-	if !strings.Contains(page2, `"id":1`) || strings.Contains(page2, "next_cursor") {
-		t.Fatalf("page 2 (the last: no next_cursor): %s", page2)
+	if problems := r.Validate(); len(problems) > 0 {
+		t.Fatal(problems)
 	}
 }
 
-func TestAnEmptyListIsAnArray(t *testing.T) {
+func TestAReportIsStoredAsPostedAndReadBack(t *testing.T) {
 	srv, _ := server(t)
-	_, body, _ := do(t, "GET", srv.URL+"/api/notes", "")
-	if strings.TrimSpace(body) != `{"data":[]}` {
-		t.Fatalf("got %s", body)
+	// A newer tool's field, which the Go type does not have.
+	body := edit(t, func(m map[string]any) { m["thermal"] = map[string]any{"status": "ok", "pressure": "nominal"} })
+	status, answer := post(t, srv.URL, body)
+	if status != 201 || !strings.Contains(answer, `"duplicate":false`) || !strings.Contains(answer, `"conditions":[]`) {
+		t.Fatalf("post: %d %s", status, answer)
+	}
+	if status, answer = post(t, srv.URL, body); status != 201 || !strings.Contains(answer, `"duplicate":true`) {
+		t.Fatalf("second post: %d %s", status, answer)
+	}
+	status, answer, _ = do(t, "GET", srv.URL+"/api/devices/"+exampleID, "", "token", testRead)
+	if status != 200 || !strings.Contains(answer, `"pressure":"nominal"`) || !strings.Contains(answer, `"due":`) || !strings.Contains(answer, `"caller":"lead-agent"`) || !strings.Contains(answer, `"session_running":true`) {
+		t.Fatalf("get: %d %s", status, answer)
+	}
+	status, answer, _ = do(t, "GET", srv.URL+"/api/devices", "", "token", testRead)
+	if status != 200 || !strings.Contains(answer, `"id":"`+exampleID+`"`) || !strings.Contains(answer, `"now":`) {
+		t.Fatalf("list: %d %s", status, answer)
+	}
+	if status, answer, _ = do(t, "GET", srv.URL+"/api/devices/0000000000000000", "", "token", testRead); status != 404 {
+		t.Fatalf("unknown device: %d %s", status, answer)
+	}
+	if status, answer, _ = do(t, "GET", srv.URL+"/api/devices/0000000000000000/reports", "", "token", testRead); status != 404 {
+		t.Fatalf("unknown device's history: %d %s", status, answer)
 	}
 }
 
-func TestInvalidInputIs422WithTheLocation(t *testing.T) {
+func TestHistoryIsNewestFirstAndTheDeviceFollowsTheNewest(t *testing.T) {
 	srv, _ := server(t)
-	for _, c := range []struct{ method, path, body, location string }{
-		{"GET", "/api/notes?limit=0", "", "query.limit"},
-		{"GET", "/api/notes?limit=101", "", "query.limit"},
-		{"GET", "/api/notes?cursor=x", "", "query.cursor"},
-		{"GET", "/api/notes/watch?after=x", "", "query.after"},
-		{"GET", "/api/notes/watch?seconds=301", "", "query.seconds"},
-		{"POST", "/api/notes", `{"body":""}`, "body.body"},
-		{"POST", "/api/notes", `{"body":"a ` + END + ` b"}`, "body.body"},
-		{"POST", "/api/notes", `{}`, "body"},
-	} {
-		status, body, _ := do(t, c.method, srv.URL+c.path, c.body)
-		if status != 422 || !strings.Contains(body, `"location":"`+c.location) {
-			t.Errorf("%s %s %s: HTTP %d %s, want 422 at %s", c.method, c.path, c.body, status, body, c.location)
+	for _, ts := range []float64{1000, 3000, 2000} { // 2000 arrives last, as a resent report would
+		if status, answer := post(t, srv.URL, edit(t, func(m map[string]any) { m["ts"] = ts })); status != 201 {
+			t.Fatalf("post %v: %d %s", ts, status, answer)
 		}
+	}
+	var history DeviceHistory
+	_, answer, _ := do(t, "GET", srv.URL+"/api/devices/"+exampleID+"/reports?limit=2", "", "token", testRead)
+	if err := json.Unmarshal([]byte(answer), &history); err != nil || len(history.Reports) != 2 {
+		t.Fatalf("history: %v %s", err, answer)
+	}
+	var first, second DeviceReport
+	json.Unmarshal(history.Reports[0].Report, &first)
+	json.Unmarshal(history.Reports[1].Report, &second)
+	if first.TS != 3000 || second.TS != 2000 {
+		t.Fatalf("history order: %d, %d", first.TS, second.TS)
+	}
+	_, answer, _ = do(t, "GET", srv.URL+"/api/devices/"+exampleID, "", "token", testRead)
+	if !strings.Contains(answer, `"ts":3000`) {
+		t.Fatalf("the device's report is not the newest: %s", answer)
+	}
+}
+
+func TestTokens(t *testing.T) {
+	srv, _ := server(t)
+	body := edit(t, nil)
+	for _, c := range []struct {
+		name, method, path, body, token string
+		status                          int
+	}{
+		{"post with no token", "POST", "/api/devices/" + exampleID + "/reports", body, "", 401},
+		{"post with the read token", "POST", "/api/devices/" + exampleID + "/reports", body, testRead, 401},
+		{"post with a wrong token", "POST", "/api/devices/" + exampleID + "/reports", body, "nope", 401},
+		{"post with the write token", "POST", "/api/devices/" + exampleID + "/reports", body, testWrite, 201},
+		{"list with no token", "GET", "/api/devices", "", "", 401},
+		{"list with the read token", "GET", "/api/devices", "", testRead, 200},
+		{"list with the write token", "GET", "/api/devices", "", testWrite, 200},
+		{"history with no token", "GET", "/api/devices/" + exampleID + "/reports", "", "", 401},
+		{"one device with a wrong token", "GET", "/api/devices/" + exampleID, "", "nope", 401},
+	} {
+		headers := []string{}
+		if c.token != "" {
+			headers = []string{"token", c.token}
+		}
+		status, answer, header := do(t, c.method, srv.URL+c.path, c.body, headers...)
+		if status != c.status || (status == 401 && header.Get("WWW-Authenticate") != "Bearer") {
+			t.Errorf("%s: HTTP %d %s, want %d", c.name, status, answer, c.status)
+		}
+	}
+}
+
+func TestUnsetTokensMatchNothing(t *testing.T) {
+	env := Env{Var: func(string) string { return "" }, Store: func() (Store, error) { return &MemStore{}, nil }}
+	srv := httptest.NewServer(Handler(env))
+	defer srv.Close()
+	for _, token := range []string{"", " "} {
+		if status, _, _ := do(t, "GET", srv.URL+"/api/devices", "", "Authorization", "Bearer "+token); status != 401 {
+			t.Errorf("token %q with no secrets set: HTTP %d, want 401", token, status)
+		}
+	}
+}
+
+func TestBadReportsAre422WithTheLocation(t *testing.T) {
+	srv, _ := server(t)
+	for name, c := range map[string]struct {
+		change   func(m map[string]any)
+		location string
+	}{
+		"percent 101 (a tag)":                 {func(m map[string]any) { section(m, "battery")["percent"] = 101 }, "body.battery.percent"},
+		"reason not in the enum (a tag)":      {func(m map[string]any) { m["reason"] = "whenever" }, "body.reason"},
+		"upper-case id (a tag)":               {func(m map[string]any) { m["id"] = "3F9A1C0B7D2E4A65" }, "body.id"},
+		"no host (a tag)":                     {func(m map[string]any) { delete(m, "host") }, "body"},
+		"ok with no percent (Validate)":       {func(m map[string]any) { delete(section(m, "battery"), "percent") }, "body.battery.percent"},
+		"unknown with no reason (Validate)":   {func(m map[string]any) { m["lid"] = map[string]any{"status": "unknown"} }, "body.lid.why"},
+		"schema 2 (Validate)":                 {func(m map[string]any) { m["schema"] = 2 }, "body.schema"},
+		"interval promising nothing":          {func(m map[string]any) { m["next_s"] = 0 }, "body.next_s"},
+		"another device's id (Resolve)":       {func(m map[string]any) { m["id"] = "00aa11bb22cc33dd" }, "body.id"},
+		"a home directory in rig.work_dir":    {func(m map[string]any) { section(m, "rig")["work_dir"] = "/Users/someone/claude-work" }, "body.rig.work_dir"},
+		"rig ok without logged_in":            {func(m map[string]any) { delete(section(m, "rig"), "logged_in") }, "body.rig.logged_in"},
+		"rig unknown with values":             {func(m map[string]any) { m["rig"] = map[string]any{"status": "unknown", "why": "x", "logged_in": true} }, "body.rig.logged_in"},
+		"rig status not in the enum":          {func(m map[string]any) { section(m, "rig")["status"] = "fine" }, "body.rig.status"},
+		"claims ok without slots":             {func(m map[string]any) { delete(section(m, "claims"), "slots") }, "body.claims.slots"},
+		"a caller with an @":                  {func(m map[string]any) { claim(m)["caller"] = "someone@studio-1" }, "body.claims.held[0].caller"},
+		"a claim that lapses before it began": {func(m map[string]any) { claim(m)["until"] = 1 }, "body.claims.held[0].until"},
+		"a claim id with a space (a tag)":     {func(m map[string]any) { claim(m)["id"] = "a b" }, "body.claims.held[0].id"},
+		"more claims than slots":              {func(m map[string]any) { section(m, "claims")["slots"] = 1; held(m, 2) }, "body.claims.held"},
+	} {
+		status, answer := post(t, srv.URL, edit(t, c.change))
+		if status != 422 || !strings.Contains(answer, `"location":"`+c.location+`"`) {
+			t.Errorf("%s: %d %s", name, status, answer)
+		}
+	}
+	if status, answer := post(t, srv.URL, edit(t, func(m map[string]any) { m["pad"] = strings.Repeat("x", DeviceMaxBody) })); status != 413 {
+		t.Errorf("over 16 KiB: %d %s", status, answer)
+	}
+}
+
+func TestRigAndClaimsAreOptional(t *testing.T) {
+	srv, _ := server(t)
+	body := edit(t, func(m map[string]any) { delete(m, "rig"); delete(m, "claims") })
+	if status, answer := post(t, srv.URL, body); status != 201 {
+		t.Fatalf("without rig and claims: %d %s", status, answer)
+	}
+	body = edit(t, func(m map[string]any) {
+		m["ts"] = 1790842406356
+		m["rig"] = map[string]any{"status": "none"}
+		m["claims"] = map[string]any{"status": "unknown", "why": "the claims folder is not readable"}
+	})
+	if status, answer := post(t, srv.URL, body); status != 201 {
+		t.Fatalf("rig none, claims unknown: %d %s", status, answer)
+	}
+}
+
+func claim(m map[string]any) map[string]any {
+	return section(m, "claims")["held"].([]any)[0].(map[string]any)
+}
+
+func held(m map[string]any, n int) {
+	var list []any
+	for i := range n {
+		list = append(list, map[string]any{"id": "c" + itoa(i), "caller": "agent", "job": "work", "since": 1})
+	}
+	section(m, "claims")["held"] = list
+}
+
+func TestConditions(t *testing.T) {
+	srv, _ := server(t)
+	ts := 0
+	for name, c := range map[string]struct {
+		change func(m map[string]any)
+		code   string
+	}{
+		"lid does nothing, no keeper": {func(m map[string]any) { section(m, "sleep")["lid_action"] = "nothing" }, "unminded"},
+		"on battery under 20": {func(m map[string]any) {
+			section(m, "power")["source"] = "battery"
+			section(m, "battery")["percent"], section(m, "battery")["state"] = 12, "discharging"
+		}, "battery-low"},
+		"closed on battery": {func(m map[string]any) {
+			section(m, "power")["source"] = "battery"
+			section(m, "battery")["state"] = "discharging"
+			section(m, "lid")["closed"] = true
+		}, "closed-on-battery"},
+		"stopped":           {func(m map[string]any) { m["reason"], m["next_s"] = "stop", 0 }, "stopped"},
+		"Claude logged out": {func(m map[string]any) { section(m, "rig")["logged_in"] = false }, "rig-unready"},
+	} {
+		status, answer := post(t, srv.URL, edit(t, func(m map[string]any) { ts++; m["ts"] = ts; c.change(m) }))
+		if status != 201 || !strings.Contains(answer, `"code":"`+c.code+`"`) {
+			t.Errorf("%s: %d %s", name, status, answer)
+		}
+	}
+}
+
+func TestQuietIsJudgedByWhenTheWorkerReceivedIt(t *testing.T) {
+	var r DeviceReport
+	json.Unmarshal(ExampleReport, &r)
+	if got := conditions(r, 0, 3*r.NextS*1000); len(got) != 0 {
+		t.Fatalf("on time: %v", got)
+	}
+	got := conditions(r, 0, 3*r.NextS*1000+1)
+	if len(got) != 1 || got[0].Code != DeviceCondQuiet || got[0].Since != 3*r.NextS*1000 {
+		t.Fatalf("late: %v", got)
 	}
 }
 
@@ -121,168 +293,32 @@ func TestUnknownPathAndMethod(t *testing.T) {
 	if status, _, _ := do(t, "GET", srv.URL+"/api/nope", ""); status != 404 {
 		t.Errorf("unknown path: HTTP %d, want 404", status)
 	}
-	status, _, header := do(t, "DELETE", srv.URL+"/api/notes", "")
-	if status != 405 || header.Get("Allow") != "GET, POST" {
-		t.Errorf("DELETE /api/notes: HTTP %d Allow %q, want 405 GET, POST", status, header.Get("Allow"))
+	status, _, header := do(t, "DELETE", srv.URL+"/api/devices", "")
+	if status != 405 || header.Get("Allow") != "GET" {
+		t.Errorf("DELETE /api/devices: HTTP %d Allow %q, want 405 GET", status, header.Get("Allow"))
 	}
 }
 
-// The SSE wire format is the oRPC Worker's, byte for byte: a comment, then event/retry/id/data
-// per note, then the close event carrying the terminator.
-func TestWatchCatchesUpAndEndsWithTheTerminator(t *testing.T) {
-	srv, _ := server(t)
-	create(t, srv.URL, "one")
-	two := create(t, srv.URL, "two")
-	status, body, header := do(t, "GET", srv.URL+"/api/notes/watch?after=1&seconds=1", "")
-	want := ": \n\nevent: message\nretry: 1000\nid: 2\ndata: {\"id\":2,\"body\":\"two\",\"created_at\":\"" + two.CreatedAt + "\"}\n\nevent: close\ndata: \"" + END + "\"\n\n"
-	if status != 200 || header.Get("Content-Type") != "text/event-stream" || body != want {
-		t.Fatalf("HTTP %d %s\n%q\nwant\n%q", status, header.Get("Content-Type"), body, want)
-	}
-}
-
-func TestWatchWithoutAfterStartsFromNowAndGoesLive(t *testing.T) {
-	srv, _ := server(t)
-	create(t, srv.URL, "old")
-	// Create the live note only once the stream has started, so a slow machine can't make the note
-	// older than the stream (the check runs this beside a TinyGo build).
-	res, err := http.Get(srv.URL + "/api/notes/watch?seconds=3")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	lines := bufio.NewScanner(res.Body)
-	lines.Scan() // the opening comment: the response has started
-	go func() { time.Sleep(300 * time.Millisecond); create(t, srv.URL, "new") }()
-	var seen strings.Builder
-	for lines.Scan() {
-		seen.WriteString(lines.Text() + "\n")
-	}
-	body := seen.String()
-	if strings.Contains(body, `"old"`) || !strings.Contains(body, "id: 2\n") {
-		t.Fatalf("want only the live note 2:\n%s", body)
-	}
-}
-
-func TestLastEventIDIsAPositionAndTheNewestWins(t *testing.T) {
-	srv, _ := server(t)
-	for _, body := range []string{"a", "b", "c"} {
-		create(t, srv.URL, body)
-	}
-	_, body, _ := do(t, "GET", srv.URL+"/api/notes/watch?after=1&seconds=1", "", "Last-Event-ID", "2")
-	if strings.Contains(body, "id: 2\n") || !strings.Contains(body, "id: 3\n") {
-		t.Fatalf("want only note 3:\n%s", body)
-	}
-}
-
-// failingHub never lets anyone subscribe.
-type failingHub struct{}
-
-func (failingHub) Publish(context.Context, Note) error { return nil }
-func (failingHub) Subscribe(func(Note), func(error)) (func(), error) {
-	return nil, errors.New("hub unavailable")
-}
-
-func TestWatchEndsWithoutTheTerminatorWhenTheHubIsDown(t *testing.T) {
-	memory := &MemStore{}
-	env := Env{Var: func(string) string { return "" }, Store: func() (Store, error) { return memory, nil }, Hub: func() (Hub, error) { return failingHub{}, nil }}
-	srv := httptest.NewServer(Handler(env))
-	defer srv.Close()
-	status, body, _ := do(t, "GET", srv.URL+"/api/notes/watch?after=0&seconds=30", "")
-	if status != 200 || strings.Contains(body, END) || strings.Contains(body, "event: error") {
-		t.Fatalf("HTTP %d, want a stream that just ends (so SDKs reconnect):\n%s", status, body)
-	}
-}
-
-func TestLiveNeedsAnUpgradeAndThenSendsOneNotePerLine(t *testing.T) {
-	srv, _ := server(t)
-	if status, _, _ := do(t, "GET", srv.URL+"/api/notes/live", ""); status != 426 {
-		t.Fatalf("plain GET: HTTP %d, want 426", status)
-	}
-	if status, _, _ := do(t, "GET", srv.URL+"/api/notes/live?after=x", "", "Upgrade", "websocket"); status != 422 {
-		t.Fatalf("bad after: HTTP %d, want 422", status)
-	}
-	create(t, srv.URL, "one")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/api/notes/live?after=0", nil)
-	req.Header.Set("Upgrade", "websocket")
-	res, err := http.DefaultTransport.RoundTrip(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	go func() { time.Sleep(200 * time.Millisecond); create(t, srv.URL, "two") }()
-	var got []int64
-	scanner := bufio.NewScanner(res.Body)
-	for len(got) < 2 && scanner.Scan() {
-		if scanner.Text() == "" {
-			continue // padding: the response starts before the first note
+func TestHomeDirectories(t *testing.T) {
+	for path, home := range map[string]bool{
+		"~/claude-work": false, "/System/Volumes/Data": false, "/": false, "C:\\": false, "/Users/Shared/work": false,
+		"/Users/someone": true, "/home/someone/work": true, "C:\\Users\\someone\\work": true,
+	} {
+		if homeDir(path) != home {
+			t.Errorf("homeDir(%q) = %v", path, !home)
 		}
-		var note Note
-		if err := json.Unmarshal(scanner.Bytes(), &note); err != nil {
-			t.Fatalf("line %q: %v", scanner.Text(), err)
-		}
-		got = append(got, note.ID)
-	}
-	if len(got) != 2 || got[0] != 1 || got[1] != 2 {
-		t.Fatalf("got %v, want [1 2]", got)
 	}
 }
 
-// ---- the specs ----
+// ---- the spec ----
 
-func spec(t *testing.T, generate func(string) ([]byte, error)) map[string]any {
-	t.Helper()
-	raw, err := generate("https://example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatal(err)
-	}
-	return doc
-}
-
-func at(doc any, path ...string) any {
-	for _, key := range path {
-		m, ok := doc.(map[string]any)
-		if !ok {
-			return nil
-		}
-		doc = m[key]
-	}
-	return doc
-}
-
-func TestTheWorkerServesBothSpecsWithItsOriginAsServer(t *testing.T) {
+func TestTheWorkerServesTheSpecWithItsOriginAsServer(t *testing.T) {
 	srv, _ := server(t)
 	_, openapi, _ := do(t, "GET", srv.URL+"/api/openapi.json", "")
-	_, asyncapi, _ := do(t, "GET", srv.URL+"/api/asyncapi.json", "")
-	host := strings.TrimPrefix(srv.URL, "http://")
 	if !strings.Contains(openapi, `"servers":[{"url":"`+srv.URL+`"}]`) {
 		t.Errorf("openapi servers: %s", openapi)
 	}
-	if !strings.Contains(asyncapi, `"host":"`+host+`","protocol":"ws"`) {
-		t.Errorf("asyncapi servers: %s", asyncapi)
-	}
-}
-
-func TestTheWebSocketChannelIsInAsyncAPINotOpenAPI(t *testing.T) {
-	if at(spec(t, OpenAPI), "paths", "/api/notes/live") != nil {
-		t.Error("/api/notes/live is in OpenAPI")
-	}
-	asyncapi := spec(t, AsyncAPI)
-	if at(asyncapi, "channels", "liveNotes", "address") != "/api/notes/live" {
-		t.Errorf("channel liveNotes: %v", at(asyncapi, "channels", "liveNotes"))
-	}
-	if at(asyncapi, "channels", "liveNotes", "bindings", "ws", "query", "properties", "after", "pattern") != `^\d+$` {
-		t.Error("the channel's query binding has no `after` with its pattern")
-	}
-	if at(asyncapi, "operations", "receiveNote", "action") != "receive" {
-		t.Error("no receive operation receiveNote")
-	}
-	if at(asyncapi, "components", "messages", "Note", "payload", "$ref") != "#/components/schemas/Note" || at(asyncapi, "components", "schemas", "Note", "properties", "id") == nil {
-		t.Errorf("message Note: %v", at(asyncapi, "components"))
+	if !strings.Contains(openapi, `"securitySchemes":{"bearer":{"scheme":"bearer","type":"http"}}`) {
+		t.Errorf("no bearer scheme: %s", openapi)
 	}
 }

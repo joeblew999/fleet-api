@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "id": "3f9a1c0b7d2e4a65",
+  "ts": 1790842406355,
+  "reason": "interval",
+  "next_s": 300,
+  "tool": { "name": "claude-rig", "version": "4fd9d8e", "command": "doctor" },
+  "host": { "name": "studio-1", "os": "darwin", "arch": "arm64", "os_name": "macOS", "os_version": "27.0.1", "model": "Mac14,10", "guest": false, "boot": 1790690961000 },
+  "cpu": { "status": "ok", "count": 12, "load1": 2.73 },
+  "memory": { "status": "ok", "total": 17179869184, "available": 3869261824 },
+  "disks": [ { "roles": ["system", "data"], "path": "/System/Volumes/Data", "status": "ok", "fs": "apfs", "total": 494384795648, "free": 16648376320 } ],
+  "power": { "status": "ok", "source": "ac" },
+  "battery": { "status": "ok", "count": 1, "percent": 100, "state": "full" },
+  "lid": { "status": "ok", "closed": false },
+  "sleep": { "status": "ok", "idle_s": 0, "display_s": 1800, "lid_action": "sleep", "inhibited": true, "inhibitors": ["caffeinate"] },
+  "keeper": { "status": "none" },
+  "rig": { "status": "ok", "commit": "4fd9d8e", "tools_installed": true, "claude_version": "2.1.0 (Claude Code)", "config_applied": true, "logged_in": true, "session_running": true, "work_dir": "~/claude-work" },
+  "claims": { "status": "ok", "slots": 2, "held": [ { "id": "20261003-102233-ab12c", "caller": "lead-agent", "job": "run the tests on macOS", "since": 1790842300000, "until": 1790843200000 } ] }
+}
