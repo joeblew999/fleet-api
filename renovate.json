@@ -1,0 +1,4 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>joeblew999/charter//cmd/charter/renovate/charter#v0.12.0"]
+}
